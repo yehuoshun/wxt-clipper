@@ -21,7 +21,9 @@ if (config.webdavEndpoint) $input('webdavEndpoint').value = config.webdavEndpoin
 if (config.webdavUser) $input('webdavUser').value = config.webdavUser;
 if (config.webdavPass) $input('webdavPass').value = config.webdavPass;
 if (config.yuqueToken) $input('yuqueToken').value = config.yuqueToken;
-if (config.yuqueRepoId) $input('yuqueRepoId').value = config.yuqueRepoId;
+if (config.yuqueRepoId) $select('yuqueRepoId').value = config.yuqueRepoId;
+// Load repo list if token exists
+if (config.yuqueToken) fetchYuqueRepos(config.yuqueToken, config.yuqueRepoId);
 if (config.githubToken) $input('githubToken').value = config.githubToken;
 
 // Auto-save toggle
@@ -60,7 +62,7 @@ $('saveBtn').addEventListener('click', async () => {
     webdavUser: $input('webdavUser').value,
     webdavPass: $input('webdavPass').value,
     yuqueToken: $input('yuqueToken').value,
-    yuqueRepoId: $input('yuqueRepoId').value,
+    yuqueRepoId: $select('yuqueRepoId').value,
     githubToken: $input('githubToken').value,
   };
 
@@ -116,6 +118,66 @@ $('testBtn').addEventListener('click', async () => {
     showToast('❌ 连接失败', 'error');
   }
 });
+
+// Fetch repos button
+$('fetchReposBtn').addEventListener('click', async () => {
+  const token = $input('yuqueToken').value;
+  if (!token) { showToast('❌ 请先填写 Token', 'error'); return; }
+  showToast('⏳ 获取知识库列表...', 'success');
+  await fetchYuqueRepos(token);
+});
+
+async function fetchYuqueRepos(token: string, selectedId?: string) {
+  const select = $select('yuqueRepoId');
+  select.innerHTML = '<option value="">加载中...</option>';
+
+  try {
+    // Fetch user repos
+    const userRes = await fetch('https://www.yuque.com/api/v2/user/repos?type=all', {
+      headers: { 'X-Auth-Token': token },
+    });
+    const userData = await userRes.json();
+    const repos: Array<{ id: number; name: string; namespace: string }> = [];
+
+    if (userData.data) {
+      repos.push(...userData.data.map((r: any) => ({
+        id: r.id, name: r.name, namespace: r.namespace,
+      })));
+    }
+
+    // Fetch group repos
+    try {
+      const groupsRes = await fetch('https://www.yuque.com/api/v2/user/groups', {
+        headers: { 'X-Auth-Token': token },
+      });
+      const groupsData = await groupsRes.json();
+      if (groupsData.data) {
+        for (const g of groupsData.data) {
+          try {
+            const grRes = await fetch(`https://www.yuque.com/api/v2/groups/${g.login}/repos`, {
+              headers: { 'X-Auth-Token': token },
+            });
+            const grData = await grRes.json();
+            if (grData.data) {
+              repos.push(...grData.data.map((r: any) => ({
+                id: r.id, name: `[${g.name}] ${r.name}`, namespace: r.namespace,
+              })));
+            }
+          } catch { /* skip failed groups */ }
+        }
+      }
+    } catch { /* skip groups */ }
+
+    select.innerHTML = repos.length > 0
+      ? repos.map(r => `<option value="${r.id}" ${String(r.id) === selectedId ? 'selected' : ''}>${r.name}</option>`).join('')
+      : '<option value="">未找到知识库</option>';
+
+    showToast(`✅ 找到 ${repos.length} 个知识库`, 'success');
+  } catch (err) {
+    select.innerHTML = '<option value="">获取失败，请检查 Token</option>';
+    showToast('❌ 获取知识库失败', 'error');
+  }
+}
 
 function showToast(msg: string, type: string) {
   const toast = $('toast');

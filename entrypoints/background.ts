@@ -1,3 +1,5 @@
+import { yuqueCreateDoc, yuqueSearchDoc, yuqueUpdateDoc } from '../lib/storage/yuque';
+
 export default defineBackground(() => {
   // ===== Context Menu =====
   browser.contextMenus.create({ id: 'clip-fullpage', title: '保存完整页面', contexts: ['page'] });
@@ -111,14 +113,23 @@ export default defineBackground(() => {
         break;
       }
       case 'yuque': {
-        await fetch(`https://www.yuque.com/api/v2/repos/${config.yuqueRepoId}/docs`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Auth-Token': config.yuqueToken,
-          },
-          body: JSON.stringify({ title, body: content, format: config.defaultFormat || 'markdown', public: 0 }),
-        });
+        const token = config.yuqueToken;
+        const repoId = parseInt(config.yuqueRepoId) || 0;
+        if (!token || !repoId) return;
+
+        // Check if doc with same title exists (auto-save dedup)
+        const searchResult = await yuqueSearchDoc(token, repoId, title);
+        if (searchResult.success && searchResult.doc) {
+          // Update existing doc
+          await yuqueUpdateDoc(token, repoId, searchResult.doc.id, title, content, {
+            format: (config.defaultFormat as 'markdown' | 'html') || 'markdown',
+          });
+        } else {
+          // Create new doc
+          await yuqueCreateDoc(token, repoId, title, content, {
+            format: (config.defaultFormat as 'markdown' | 'html') || 'markdown',
+          });
+        }
         break;
       }
       case 'github': {

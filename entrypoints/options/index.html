@@ -153,10 +153,16 @@
       <div class="field">
         <label>语雀 Token</label>
         <input type="password" id="yuqueToken" placeholder="语雀 API Token">
+        <span class="hint">在 <a href="https://www.yuque.com/settings/tokens" target="_blank">语雀设置 → Token</a> 创建</span>
       </div>
       <div class="field">
-        <label>知识库 ID</label>
-        <input type="text" id="yuqueRepoId" placeholder="知识库 ID">
+        <label>知识库</label>
+        <div style="display:flex;gap:8px">
+          <select id="yuqueRepoId" style="flex:1">
+            <option value="">请先填写 Token 后点击「获取知识库」</option>
+          </select>
+          <button type="button" class="btn secondary" id="fetchReposBtn" style="width:auto;padding:8px 12px;font-size:13px">获取知识库</button>
+        </div>
       </div>
     </div>
     <div id="githubFields" style="display:none">
