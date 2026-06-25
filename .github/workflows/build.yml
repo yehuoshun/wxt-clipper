@@ -20,34 +20,38 @@ jobs:
       - run: npm ci
 
       - name: Build Chrome
-        run: npx wxt build -b chrome
+        run: npx wxt build -b chrome && cd .output/chrome-mv3 && zip -r ../../wxt-clipper-chrome.zip .
 
       - name: Build Firefox
-        run: npx wxt build -b firefox
+        run: npx wxt build -b firefox && cd .output/firefox-mv2 && zip -r ../../wxt-clipper-firefox.zip .
 
-      - name: Zip Chrome
-        run: cd .output/chrome-mv3 && zip -r ../../wxt-clipper-chrome.zip .
+      - name: Build Edge
+        run: npx wxt build -b edge && cd .output/edge-mv3 && zip -r ../../wxt-clipper-edge.zip .
 
-      - name: Zip Firefox
-        run: cd .output/firefox-mv2 && zip -r ../../wxt-clipper-firefox.zip .
-
-      - name: Upload Chrome artifact
+      - name: Upload Chrome
         uses: actions/upload-artifact@v4
         with:
           name: wxt-clipper-chrome
           path: wxt-clipper-chrome.zip
 
-      - name: Upload Firefox artifact
+      - name: Upload Firefox
         uses: actions/upload-artifact@v4
         with:
           name: wxt-clipper-firefox
           path: wxt-clipper-firefox.zip
 
-      - name: Create Release (tag only)
+      - name: Upload Edge
+        uses: actions/upload-artifact@v4
+        with:
+          name: wxt-clipper-edge
+          path: wxt-clipper-edge.zip
+
+      - name: Create Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: |
             wxt-clipper-chrome.zip
             wxt-clipper-firefox.zip
+            wxt-clipper-edge.zip
           generate_release_notes: true
