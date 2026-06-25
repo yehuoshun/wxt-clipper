@@ -3,6 +3,8 @@
  * Preserves the DOM structure of the selected region.
  */
 
+import { stripWatermarks } from './watermark';
+
 interface SelectionOptions {
   /** Include parent heading context */
   includeContext?: boolean;
@@ -47,10 +49,16 @@ export async function captureSelection(
   html += `<hr>\n`;
   html += container.innerHTML;
 
+  // Strip watermarks
+  const tempDiv = doc.createElement('div');
+  tempDiv.innerHTML = html;
+  stripWatermarks(tempDiv);
+  html = tempDiv.innerHTML;
+
   // Inline images in selection
-  const temp = doc.createElement('div');
-  temp.innerHTML = html;
-  const imgs = temp.querySelectorAll('img[src]');
+  const imgDiv = doc.createElement('div');
+  imgDiv.innerHTML = html;
+  const imgs = imgDiv.querySelectorAll('img[src]');
   await Promise.all(
     Array.from(imgs).map(async (img) => {
       const src = img.getAttribute('src')!;
@@ -61,7 +69,7 @@ export async function captureSelection(
       } catch { /* keep original */ }
     })
   );
-  html = temp.innerHTML;
+  html = imgDiv.innerHTML;
 
   return { title, html, url: doc.URL };
 }

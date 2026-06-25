@@ -13,6 +13,7 @@
  */
 
 import { fetchAsDataUri, fetchText } from '../resource/fetcher';
+import { stripWatermarks } from './watermark';
 
 interface CaptureOptions {
   removeScripts?: boolean;
@@ -83,6 +84,12 @@ export async function captureFullPage(
     const attrs = el.getAttributeNames();
     attrs.filter(a => a.startsWith('on')).forEach(a => el.removeAttribute(a));
   });
+
+  // Strip hidden watermarks
+  const watermarkCount = stripWatermarks(clone);
+  if (watermarkCount > 0) {
+    console.log(`[Web Clipper] Stripped ${watermarkCount} watermark elements`);
+  }
 
   // Inline all resources
   if (inlineResources) {

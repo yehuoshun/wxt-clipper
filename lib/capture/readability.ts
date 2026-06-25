@@ -4,6 +4,7 @@
  */
 
 import { fetchAsDataUri } from '../resource/fetcher';
+import { stripWatermarks } from './watermark';
 
 interface ArticleOptions {
   keepImages?: boolean;
@@ -44,17 +45,21 @@ export async function captureArticle(
 
   const title = article.title || doc.title;
 
-  // Build clean HTML with watermark
+  // Build HTML and strip watermarks
+  const temp = doc.createElement('div');
+  temp.innerHTML = article.content;
+  stripWatermarks(temp);
+
   let html = `<h1>${escapeHtml(title)}</h1>\n`;
   html += `<p><em>Source: <a href="${escapeHtml(url)}">${escapeHtml(url)}</a></em></p>\n`;
   html += `<hr>\n`;
-  html += article.content;
+  html += temp.innerHTML;
 
   // Inline images
   if (keepImages) {
-    const temp = doc.createElement('div');
-    temp.innerHTML = html;
-    const imgs = temp.querySelectorAll('img[src]');
+    const temp2 = doc.createElement('div');
+    temp2.innerHTML = html;
+    const imgs = temp2.querySelectorAll('img[src]');
     await Promise.all(
       Array.from(imgs).map(async (img) => {
         const src = img.getAttribute('src')!;
@@ -65,7 +70,7 @@ export async function captureArticle(
         } catch { /* keep original */ }
       })
     );
-    html = temp.innerHTML;
+    html = temp2.innerHTML;
   }
 
   return { title, html, url };
