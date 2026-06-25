@@ -1,3 +1,5 @@
+import { yuqueGetUser, yuqueListAllRepos, openYuqueTokenPage } from '../../lib/storage/yuque';
+
 const stored = await browser.storage.local.get('config');
 const config = stored.config || {};
 
@@ -97,10 +99,8 @@ $('testBtn').addEventListener('click', async () => {
       case 'yuque': {
         const token = $input('yuqueToken').value;
         if (!token) { showToast('❌ 请输入语雀 Token', 'error'); return; }
-        const res = await fetch('https://www.yuque.com/api/v2/user', {
-          headers: { 'X-Auth-Token': token },
-        });
-        ok = res.ok;
+        const result = await yuqueGetUser(token);
+        ok = result.success;
         break;
       }
       case 'github': {
@@ -119,6 +119,12 @@ $('testBtn').addEventListener('click', async () => {
   }
 });
 
+// One-click auth button
+$('yuqueAuthBtn').addEventListener('click', () => {
+  openYuqueTokenPage();
+  showToast('🔑 请在打开的页面中创建 Token 并粘贴到此处', 'success');
+});
+
 // Fetch repos button
 $('fetchReposBtn').addEventListener('click', async () => {
   const token = $input('yuqueToken').value;
@@ -131,52 +137,19 @@ async function fetchYuqueRepos(token: string, selectedId?: string) {
   const select = $select('yuqueRepoId');
   select.innerHTML = '<option value="">加载中...</option>';
 
-  try {
-    // Fetch user repos
-    const userRes = await fetch('https://www.yuque.com/api/v2/user/repos?type=all', {
-      headers: { 'X-Auth-Token': token },
-    });
-    const userData = await userRes.json();
-    const repos: Array<{ id: number; name: string; namespace: string }> = [];
-
-    if (userData.data) {
-      repos.push(...userData.data.map((r: any) => ({
-        id: r.id, name: r.name, namespace: r.namespace,
-      })));
-    }
-
-    // Fetch group repos
-    try {
-      const groupsRes = await fetch('https://www.yuque.com/api/v2/user/groups', {
-        headers: { 'X-Auth-Token': token },
-      });
-      const groupsData = await groupsRes.json();
-      if (groupsData.data) {
-        for (const g of groupsData.data) {
-          try {
-            const grRes = await fetch(`https://www.yuque.com/api/v2/groups/${g.login}/repos`, {
-              headers: { 'X-Auth-Token': token },
-            });
-            const grData = await grRes.json();
-            if (grData.data) {
-              repos.push(...grData.data.map((r: any) => ({
-                id: r.id, name: `[${g.name}] ${r.name}`, namespace: r.namespace,
-              })));
-            }
-          } catch { /* skip failed groups */ }
-        }
-      }
-    } catch { /* skip groups */ }
-
-    select.innerHTML = repos.length > 0
-      ? repos.map(r => `<option value="${r.id}" ${String(r.id) === selectedId ? 'selected' : ''}>${r.name}</option>`).join('')
-      : '<option value="">未找到知识库</option>';
-
-    showToast(`✅ 找到 ${repos.length} 个知识库`, 'success');
-  } catch (err) {
+  const result = await yuqueListAllRepos(token, 'all');
+  if (!result.success || !result.repos) {
     select.innerHTML = '<option value="">获取失败，请检查 Token</option>';
-    showToast('❌ 获取知识库失败', 'error');
+    showToast('❌ 获取知识库失败: ' + (result.error || '未知错误'), 'error');
+    return;
   }
+
+  const repos = result.repos;
+  select.innerHTML = repos.length > 0
+    ? repos.map(r => `<option value="${r.id}" ${String(r.id) === selectedId ? 'selected' : ''}>${r.name} (${r.items_count || 0} 篇)</option>`).join('')
+    : '<option value="">未找到知识库</option>';
+
+  showToast(`✅ 找到 ${repos.length} 个知识库`, 'success');
 }
 
 function showToast(msg: string, type: string) {

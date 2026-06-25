@@ -152,8 +152,11 @@
     <div id="yuqueFields" style="display:none">
       <div class="field">
         <label>语雀 Token</label>
-        <input type="password" id="yuqueToken" placeholder="语雀 API Token">
-        <span class="hint">在 <a href="https://www.yuque.com/settings/tokens" target="_blank">语雀设置 → Token</a> 创建</span>
+        <div style="display:flex;gap:8px">
+          <input type="password" id="yuqueToken" placeholder="语雀 API Token" style="flex:1">
+          <button type="button" class="btn secondary" id="yuqueAuthBtn" style="width:auto;padding:8px 12px;font-size:13px;white-space:nowrap">🔑 一键授权</button>
+        </div>
+        <span class="hint">点击「一键授权」打开语雀 Token 页面，创建 Token 后粘贴到此处</span>
       </div>
       <div class="field">
         <label>知识库</label>
@@ -161,7 +164,7 @@
           <select id="yuqueRepoId" style="flex:1">
             <option value="">请先填写 Token 后点击「获取知识库」</option>
           </select>
-          <button type="button" class="btn secondary" id="fetchReposBtn" style="width:auto;padding:8px 12px;font-size:13px">获取知识库</button>
+          <button type="button" class="btn secondary" id="fetchReposBtn" style="width:auto;padding:8px 12px;font-size:13px;white-space:nowrap">获取知识库</button>
         </div>
       </div>
     </div>

@@ -1,12 +1,13 @@
 /**
- * Yuque (语雀) integration — full API client for browser extension.
+ * Yuque (语雀) integration — OAuth-style one-click auth + full API client.
  *
- * Based on yuque-ai-mcp api-client patterns:
- * - Exponential backoff retry (1s → 2s → 4s, max 3)
- * - Proper error handling
- * - Token-based auth (Yuque doesn't have OAuth for third-party apps)
- * - Repo listing + picker
- * - TOC support
+ * Since browser extensions can't securely store OAuth client_secret,
+ * we use a "Token-based one-click auth" flow:
+ *   1. Click "一键授权" → opens yuque token settings page
+ *   2. User creates/pastes token → auto-validate → auto-fetch repos
+ *   3. Select repo → done
+ *
+ * API patterns based on yuque-ai-mcp api-client + webclipper yuque_oauth service.
  */
 
 const API_BASE = 'https://www.yuque.com/api/v2';
@@ -33,6 +34,13 @@ export interface YuqueUser {
   name: string;
   login: string;
   avatar_url: string;
+  description: string;
+}
+
+export interface YuqueGroup {
+  id: number;
+  name: string;
+  login: string;
 }
 
 export interface YuqueDoc {
@@ -57,7 +65,7 @@ function shouldRetry(res: Response | null): boolean {
   return res.status === 429 || (res.status >= 500 && res.status < 600);
 }
 
-function sleep(ms: number): Promise<void> {
+async function sleep(ms: number): Promise<void> {
   return new Promise(r => setTimeout(r, ms));
 }
 
@@ -97,15 +105,23 @@ function authHeaders(token: string, extra?: Record<string, string>): Record<stri
   return { 'X-Auth-Token': token, ...extra };
 }
 
-// ===== API Methods =====
+// ===== OAuth-Style One-Click Auth =====
 
-/** Test connection and get user info */
+/** Open yuque token settings page for one-click auth */
+export function openYuqueTokenPage(): void {
+  window.open('https://www.yuque.com/settings/tokens', '_blank');
+}
+
+/** Validate token and get user info (like OAuth callback verification) */
 export async function yuqueGetUser(token: string): Promise<{ success: boolean; user?: YuqueUser; error?: string }> {
   try {
     const res = await fetchWithRetry(`${API_BASE}/user`, {
       headers: authHeaders(token),
     });
-    if (!res.ok) return { success: false, error: `HTTP ${res.status}` };
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      return { success: false, error: (errData as any)?.message || `HTTP ${res.status}` };
+    }
     const data = await res.json();
     return { success: true, user: data.data };
   } catch (err) {
@@ -113,47 +129,78 @@ export async function yuqueGetUser(token: string): Promise<{ success: boolean; u
   }
 }
 
-/** List user's repos (knowledge bases) */
-export async function yuqueListRepos(token: string): Promise<{ success: boolean; repos?: YuqueRepo[]; error?: string }> {
+// ===== Repository Management =====
+
+/** List all user repos with pagination (like webclipper's getAllRepositories) */
+export async function yuqueListAllRepos(
+  token: string,
+  repoType: 'all' | 'self' | 'group' = 'all'
+): Promise<{ success: boolean; repos?: Array<YuqueRepo & { groupName?: string }>; error?: string }> {
   try {
-    const res = await fetchWithRetry(`${API_BASE}/user/repos?type=all`, {
-      headers: authHeaders(token),
-    });
-    if (!res.ok) return { success: false, error: `HTTP ${res.status}` };
-    const data = await res.json();
-    return { success: true, repos: data.data };
+    const userResult = await yuqueGetUser(token);
+    if (!userResult.success || !userResult.user) {
+      return { success: false, error: userResult.error || 'Invalid token' };
+    }
+    const user = userResult.user;
+
+    let repos: Array<YuqueRepo & { groupName?: string }> = [];
+
+    // Fetch user's own repos
+    if (repoType !== 'group') {
+      let offset = 0;
+      let batch: YuqueRepo[];
+      do {
+        const res = await fetchWithRetry(
+          `${API_BASE}/users/${user.login}/repos?offset=${offset}`,
+          { headers: authHeaders(token) },
+        );
+        if (!res.ok) break;
+        const data = await res.json();
+        batch = data.data || [];
+        repos.push(...batch.map((r: YuqueRepo) => ({ ...r })));
+        offset += batch.length;
+      } while (batch.length === 20);
+    }
+
+    // Fetch group repos
+    if (repoType !== 'self') {
+      const groupsRes = await fetchWithRetry(
+        `${API_BASE}/users/${user.login}/groups`,
+        { headers: authHeaders(token) },
+      );
+      if (groupsRes.ok) {
+        const groupsData = await groupsRes.json();
+        const groups: YuqueGroup[] = groupsData.data || [];
+
+        for (const group of groups) {
+          let offset = 0;
+          let batch: YuqueRepo[];
+          do {
+            const res = await fetchWithRetry(
+              `${API_BASE}/groups/${group.login}/repos?offset=${offset}`,
+              { headers: authHeaders(token) },
+            );
+            if (!res.ok) break;
+            const data = await res.json();
+            batch = data.data || [];
+            repos.push(...batch.map((r: YuqueRepo) => ({
+              ...r,
+              name: `[${group.name}] ${r.name}`,
+              groupName: group.name,
+            })));
+            offset += batch.length;
+          } while (batch.length === 20);
+        }
+      }
+    }
+
+    return { success: true, repos };
   } catch (err) {
     return { success: false, error: String(err) };
   }
 }
 
-/** List groups the user belongs to */
-export async function yuqueListGroups(token: string): Promise<{ success: boolean; groups?: Array<{ id: number; name: string; login: string }>; error?: string }> {
-  try {
-    const res = await fetchWithRetry(`${API_BASE}/user/groups`, {
-      headers: authHeaders(token),
-    });
-    if (!res.ok) return { success: false, error: `HTTP ${res.status}` };
-    const data = await res.json();
-    return { success: true, groups: data.data };
-  } catch (err) {
-    return { success: false, error: String(err) };
-  }
-}
-
-/** List repos in a group */
-export async function yuqueListGroupRepos(token: string, groupLogin: string): Promise<{ success: boolean; repos?: YuqueRepo[]; error?: string }> {
-  try {
-    const res = await fetchWithRetry(`${API_BASE}/groups/${groupLogin}/repos`, {
-      headers: authHeaders(token),
-    });
-    if (!res.ok) return { success: false, error: `HTTP ${res.status}` };
-    const data = await res.json();
-    return { success: true, repos: data.data };
-  } catch (err) {
-    return { success: false, error: String(err) };
-  }
-}
+// ===== Document Operations =====
 
 /** Create a document in a repo */
 export async function yuqueCreateDoc(
@@ -185,14 +232,13 @@ export async function yuqueCreateDoc(
 
     if (!res.ok) {
       const errData = await res.json().catch(() => ({}));
-      const msg = (errData as any)?.message || `HTTP ${res.status}`;
-      return { success: false, error: msg };
+      return { success: false, error: (errData as any)?.message || `HTTP ${res.status}` };
     }
 
     const data = await res.json();
     const doc = data.data;
 
-    // If parentUuid specified, append to TOC
+    // TOC append (best-effort)
     if (options?.parentUuid && doc?.id) {
       try {
         await fetchWithRetry(`${API_BASE}/repos/${repoId}/toc`, {
@@ -204,7 +250,7 @@ export async function yuqueCreateDoc(
             doc_id: doc.id,
           }),
         });
-      } catch { /* TOC append is best-effort */ }
+      } catch { /* best-effort */ }
     }
 
     return { success: true, url: doc?.url || doc?.slug, docId: doc?.id };
@@ -248,7 +294,7 @@ export async function yuqueUpdateDoc(
   }
 }
 
-/** Search for a document by title in a repo (for auto-save dedup) */
+/** Search for a document by title (for auto-save dedup) */
 export async function yuqueSearchDoc(
   token: string,
   repoId: number,
@@ -261,9 +307,8 @@ export async function yuqueSearchDoc(
     );
     if (!res.ok) return { success: false, error: `HTTP ${res.status}` };
     const data = await res.json();
-    const docs = data.data || [];
-    // Find exact title match
-    const match = docs.find((d: YuqueDoc) => d.title === title);
+    const docs: YuqueDoc[] = data.data || [];
+    const match = docs.find(d => d.title === title);
     return { success: true, doc: match };
   } catch (err) {
     return { success: false, error: String(err) };
