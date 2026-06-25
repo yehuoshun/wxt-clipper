@@ -23,6 +23,22 @@ export default defineBackground(() => {
       if (!tab?.id) return { success: false, error: 'No active tab' };
       return sendClip(tab.id, msg.mode, msg.options);
     }
+    if (msg.type === 'startElementPicker') {
+      const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+      if (!tab?.id) return { success: false, error: 'No active tab' };
+      // Inject content script if needed, then start picker
+      try {
+        await browser.tabs.sendMessage(tab.id, { type: 'startElementPicker' });
+      } catch {
+        await browser.scripting.executeScript({
+          target: { tabId: tab.id },
+          files: ['content-scripts/content.js'],
+        });
+        await new Promise(r => setTimeout(r, 100));
+        await browser.tabs.sendMessage(tab.id, { type: 'startElementPicker' });
+      }
+      return { success: true };
+    }
     if (msg.type === 'getConfig') {
       const stored = await browser.storage.local.get('config');
       return stored.config || {};

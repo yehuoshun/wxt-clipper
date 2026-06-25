@@ -35,7 +35,7 @@ export async function captureSelection(
 
   // Build output
   let html = `<h1>${escapeHtml(title)}</h1>\n`;
-  html += `<p><em>来源：<a href="${escapeHtml(doc.URL)}">${escapeHtml(doc.URL)}</a></em></p>\n`;
+  html += `<p><em>Source: <a href="${escapeHtml(doc.URL)}">${escapeHtml(doc.URL)}</a></em></p>\n`;
 
   if (includeContext) {
     const context = getSelectionContext(range);

@@ -1,6 +1,5 @@
 let currentMode = 'fullpage';
 
-// Mode selection
 document.querySelectorAll('.mode-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
@@ -9,10 +8,22 @@ document.querySelectorAll('.mode-btn').forEach(btn => {
   });
 });
 
-// Clip button
 document.getElementById('clipBtn')?.addEventListener('click', async () => {
   const btn = document.getElementById('clipBtn') as HTMLButtonElement;
   const status = document.getElementById('status')!;
+  const format = (document.getElementById('format') as HTMLSelectElement).value;
+  const inlineResources = (document.getElementById('inlineResources') as HTMLInputElement).checked;
+  const removeScripts = (document.getElementById('removeScripts') as HTMLInputElement).checked;
+
+  if (currentMode === 'element') {
+    // Element picker: close popup, inject picker into page
+    window.close();
+    await browser.runtime.sendMessage({
+      type: 'startElementPicker',
+      options: { format, inlineResources, removeScripts },
+    });
+    return;
+  }
 
   btn.disabled = true;
   btn.textContent = '剪藏中...';
@@ -21,10 +32,6 @@ document.getElementById('clipBtn')?.addEventListener('click', async () => {
   status.classList.remove('hidden');
 
   try {
-    const format = (document.getElementById('format') as HTMLSelectElement).value;
-    const inlineResources = (document.getElementById('inlineResources') as HTMLInputElement).checked;
-    const removeScripts = (document.getElementById('removeScripts') as HTMLInputElement).checked;
-
     const response = await browser.runtime.sendMessage({
       type: 'clip',
       mode: currentMode,

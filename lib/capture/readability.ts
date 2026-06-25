@@ -3,8 +3,9 @@
  * Extracts clean article content from web pages.
  */
 
+import { fetchAsDataUri } from '../resource/fetcher';
+
 interface ArticleOptions {
-  /** Keep images inline */
   keepImages?: boolean;
 }
 
@@ -20,20 +21,36 @@ export async function captureArticle(
 ): Promise<CaptureResult> {
   const { keepImages = true } = options;
 
-  // We use Readability bundled in the extension
-  // For now, implement a lightweight version inline
-  const article = extractArticle(doc);
-
-  const title = article.title || doc.title;
+  // Clone the document for Readability (it mutates the DOM)
+  const clone = doc.cloneNode(true) as Document;
   const url = doc.URL;
 
-  // Build clean HTML
+  // Use Mozilla Readability
+  let article: { title: string; content: string; textContent: string } | null = null;
+
+  try {
+    // @ts-ignore — Readability is bundled
+    if (typeof Readability !== 'undefined') {
+      // @ts-ignore
+      const reader = new Readability(clone);
+      article = reader.parse();
+    }
+  } catch { /* fall through to lightweight */ }
+
+  // Fallback to lightweight implementation
+  if (!article) {
+    article = lightweightExtract(doc);
+  }
+
+  const title = article.title || doc.title;
+
+  // Build clean HTML with watermark
   let html = `<h1>${escapeHtml(title)}</h1>\n`;
-  html += `<p><em>来源：<a href="${escapeHtml(url)}">${escapeHtml(url)}</a></em></p>\n`;
+  html += `<p><em>Source: <a href="${escapeHtml(url)}">${escapeHtml(url)}</a></em></p>\n`;
   html += `<hr>\n`;
   html += article.content;
 
-  // Optionally inline images
+  // Inline images
   if (keepImages) {
     const temp = doc.createElement('div');
     temp.innerHTML = html;
@@ -54,16 +71,16 @@ export async function captureArticle(
   return { title, html, url };
 }
 
-// ===== Lightweight Readability Implementation =====
+// ===== Lightweight Fallback =====
 
-function extractArticle(doc: Document): { title: string; content: string } {
+function lightweightExtract(doc: Document): { title: string; content: string; textContent: string } {
   const title = getArticleTitle(doc);
   const content = getArticleContent(doc);
-  return { title, content };
+  const textContent = doc.body.innerText.slice(0, 10000);
+  return { title, content, textContent };
 }
 
 function getArticleTitle(doc: Document): string {
-  // Try meta tags first
   const ogTitle = doc.querySelector('meta[property="og:title"]');
   if (ogTitle) return ogTitle.getAttribute('content') || '';
 
@@ -74,29 +91,20 @@ function getArticleTitle(doc: Document): string {
 }
 
 function getArticleContent(doc: Document): string {
-  // Try common article containers
   const selectors = [
-    'article',
-    '[role="main"]',
-    'main',
-    '.post-content',
-    '.article-content',
-    '.entry-content',
-    '.content',
-    '#content',
-    '.post-body',
-    '.article-body',
+    'article', '[role="main"]', 'main',
+    '.post-content', '.article-content', '.entry-content',
+    '.content', '#content', '.post-body', '.article-body',
   ];
 
   let container: Element | null = null;
   for (const sel of selectors) {
     container = doc.querySelector(sel);
-    if (container && container.textContent && container.textContent.length > 200) break;
+    if (container && (container.textContent?.length || 0) > 200) break;
     container = null;
   }
 
   if (!container) {
-    // Fallback: find the largest text block
     container = findLargestTextBlock(doc.body);
   }
 
@@ -104,10 +112,8 @@ function getArticleContent(doc: Document): string {
     return `<p>${escapeHtml(doc.body.innerText.slice(0, 5000))}</p>`;
   }
 
-  // Clone and clean
   const clone = container.cloneNode(true) as HTMLElement;
 
-  // Remove non-content elements
   const removeSelectors = [
     'script', 'style', 'noscript', 'iframe',
     'nav', 'header', 'footer',
@@ -122,7 +128,6 @@ function getArticleContent(doc: Document): string {
     clone.querySelectorAll(sel).forEach(el => el.remove());
   });
 
-  // Clean attributes
   clone.querySelectorAll('*').forEach(el => {
     const keep = ['href', 'src', 'alt', 'title'];
     const attrs = el.getAttributeNames();
@@ -146,40 +151,17 @@ function findLargestTextBlock(parent: Element): Element | null {
       bestScore = score;
     }
 
-    for (const child of el.children) {
-      walk(child);
-    }
+    for (const child of el.children) walk(child);
   }
 
   walk(parent);
   return best;
 }
 
-// ===== Helpers =====
-
 function escapeHtml(str: string): string {
   const map: Record<string, string> = {
-    '&': '&amp;',
-    '<': '&lt;',
-    '>': '&gt;',
-    '"': '&quot;',
-    "'": '&#39;',
+    '&': '&amp;', '<': '&lt;', '>': '&gt;',
+    '"': '&quot;', "'": '&#39;',
   };
   return str.replace(/[&<>"']/g, c => map[c]);
-}
-
-async function fetchAsDataUri(url: string): Promise<string | null> {
-  try {
-    const res = await fetch(url, { credentials: 'include' });
-    if (!res.ok) return null;
-    const blob = await res.blob();
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = () => resolve(null);
-      reader.readAsDataURL(blob);
-    });
-  } catch {
-    return null;
-  }
 }

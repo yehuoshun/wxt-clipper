@@ -23,6 +23,20 @@ export default defineConfig({
     action: {
       default_title: 'Web Clipper',
       default_popup: 'popup/index.html',
+      default_icon: {
+        '16': 'icon_16.png',
+        '32': 'icon_32.png',
+        '48': 'icon_48.png',
+        '64': 'icon_64.png',
+        '128': 'icon_128.png',
+      },
+    },
+    icons: {
+      '16': 'icon_16.png',
+      '32': 'icon_32.png',
+      '48': 'icon_48.png',
+      '64': 'icon_64.png',
+      '128': 'icon_128.png',
     },
     content_scripts: [
       {
