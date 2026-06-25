@@ -7,58 +7,57 @@
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      font-size: 14px;
-      color: #333;
-      background: #f5f5f5;
-      padding: 24px;
-      max-width: 600px;
-      margin: 0 auto;
+      font-size: 14px; color: #333; background: #f5f5f5;
+      padding: 24px; max-width: 640px; margin: 0 auto;
     }
     h1 { font-size: 24px; margin-bottom: 24px; }
     section {
-      background: #fff;
-      border-radius: 8px;
-      padding: 20px;
-      margin-bottom: 16px;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+      background: #fff; border-radius: 8px; padding: 20px;
+      margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.08);
     }
     section h2 { font-size: 16px; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 1px solid #eee; }
     .field { margin-bottom: 12px; }
     .field label { display: block; font-weight: 500; margin-bottom: 4px; }
+    .field .hint { font-size: 12px; color: #888; margin-top: 2px; }
     .field input, .field select {
-      width: 100%;
-      padding: 8px 12px;
-      border: 1px solid #ddd;
-      border-radius: 6px;
-      font-size: 14px;
+      width: 100%; padding: 8px 12px; border: 1px solid #ddd;
+      border-radius: 6px; font-size: 14px;
     }
     .field input:focus, .field select:focus {
-      outline: none;
-      border-color: #0366d6;
+      outline: none; border-color: #0366d6;
       box-shadow: 0 0 0 2px rgba(3,102,214,0.15);
     }
+    .field-row { display: flex; gap: 12px; }
+    .field-row .field { flex: 1; }
+    .toggle {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 8px 0;
+    }
+    .toggle input[type="checkbox"] {
+      width: 40px; height: 22px; appearance: none;
+      background: #ccc; border-radius: 11px; position: relative;
+      cursor: pointer; transition: background 0.2s;
+    }
+    .toggle input[type="checkbox"]:checked { background: #0366d6; }
+    .toggle input[type="checkbox"]::after {
+      content: ''; position: absolute; top: 2px; left: 2px;
+      width: 18px; height: 18px; background: #fff; border-radius: 50%;
+      transition: transform 0.2s;
+    }
+    .toggle input[type="checkbox"]:checked::after { transform: translateX(18px); }
     .actions { text-align: right; }
     .btn {
-      padding: 10px 24px;
-      border: none;
-      border-radius: 6px;
-      font-size: 14px;
-      font-weight: 500;
-      cursor: pointer;
-      background: #0366d6;
-      color: #fff;
+      padding: 10px 24px; border: none; border-radius: 6px;
+      font-size: 14px; font-weight: 500; cursor: pointer;
+      background: #0366d6; color: #fff;
     }
     .btn:hover { background: #0256b9; }
+    .btn.secondary { background: #e0e0e0; color: #333; margin-right: 8px; }
+    .btn.secondary:hover { background: #d0d0d0; }
     .toast {
-      position: fixed;
-      bottom: 24px;
-      right: 24px;
-      padding: 12px 20px;
-      border-radius: 8px;
-      color: #fff;
-      font-weight: 500;
-      opacity: 0;
-      transition: opacity 0.3s;
+      position: fixed; bottom: 24px; right: 24px;
+      padding: 12px 20px; border-radius: 8px; color: #fff;
+      font-weight: 500; opacity: 0; transition: opacity 0.3s;
     }
     .toast.show { opacity: 1; }
     .toast.success { background: #28a745; }
@@ -66,16 +65,17 @@
   </style>
 </head>
 <body>
-  <h1>🦞 Web Clipper 设置</h1>
+  <h1>Web Clipper 设置</h1>
 
   <section>
-    <h2>默认选项</h2>
+    <h2>剪藏选项</h2>
     <div class="field">
       <label>默认剪藏模式</label>
       <select id="defaultMode">
         <option value="fullpage">完整页面</option>
         <option value="article">正文提取</option>
         <option value="selection">选区剪藏</option>
+        <option value="element">元素选择</option>
       </select>
     </div>
     <div class="field">
@@ -84,6 +84,41 @@
         <option value="html">HTML</option>
         <option value="markdown">Markdown</option>
       </select>
+    </div>
+    <div class="toggle">
+      <span>内联图片资源 <span class="hint">（图片转 base64，文件更大但离线可看）</span></span>
+      <input type="checkbox" id="inlineResources" checked>
+    </div>
+    <div class="toggle">
+      <span>移除脚本 <span class="hint">（删除 JavaScript，更安全更小）</span></span>
+      <input type="checkbox" id="removeScripts" checked>
+    </div>
+    <div class="toggle">
+      <span>清洗隐藏水印 <span class="hint">（检测并移除隐藏追踪元素）</span></span>
+      <input type="checkbox" id="stripWatermarks" checked>
+    </div>
+    <div class="toggle">
+      <span>压缩 CSS <span class="hint">（移除注释和空白，减小体积）</span></span>
+      <input type="checkbox" id="compressCSS" checked>
+    </div>
+  </section>
+
+  <section>
+    <h2>自动保存</h2>
+    <div class="toggle">
+      <span>启用自动保存 <span class="hint">（页面加载完成后自动剪藏）</span></span>
+      <input type="checkbox" id="autoSave">
+    </div>
+    <div class="field" id="autoSaveModeField" style="display:none">
+      <label>自动保存模式</label>
+      <select id="autoSaveMode">
+        <option value="fullpage">完整页面</option>
+        <option value="article">正文提取</option>
+      </select>
+    </div>
+    <div class="field" id="autoSaveWhitelistField" style="display:none">
+      <label>域名白名单 <span class="hint">（每行一个域名，留空则全部页面自动保存）</span></span>
+      <textarea id="autoSaveWhitelist" rows="3" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:13px;font-family:monospace" placeholder="example.com&#10;blog.example.org"></textarea>
     </div>
   </section>
 
@@ -98,27 +133,42 @@
         <option value="github">GitHub Gist</option>
       </select>
     </div>
-    <div class="field" id="webdavFields" style="display:none">
-      <label>WebDAV 地址</label>
-      <input type="url" id="webdavEndpoint" placeholder="https://dav.example.com/clips/">
-      <label style="margin-top:8px">用户名</label>
-      <input type="text" id="webdavUser" placeholder="可选">
-      <label style="margin-top:8px">密码</label>
-      <input type="password" id="webdavPass" placeholder="可选">
+    <div id="webdavFields" style="display:none">
+      <div class="field">
+        <label>WebDAV 地址</label>
+        <input type="url" id="webdavEndpoint" placeholder="https://dav.example.com/clips/">
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>用户名</label>
+          <input type="text" id="webdavUser" placeholder="可选">
+        </div>
+        <div class="field">
+          <label>密码</label>
+          <input type="password" id="webdavPass" placeholder="可选">
+        </div>
+      </div>
     </div>
-    <div class="field" id="yuqueFields" style="display:none">
-      <label>语雀 Token</label>
-      <input type="password" id="yuqueToken" placeholder="语雀 API Token">
-      <label style="margin-top:8px">知识库 ID</label>
-      <input type="text" id="yuqueRepoId" placeholder="知识库 ID">
+    <div id="yuqueFields" style="display:none">
+      <div class="field">
+        <label>语雀 Token</label>
+        <input type="password" id="yuqueToken" placeholder="语雀 API Token">
+      </div>
+      <div class="field">
+        <label>知识库 ID</label>
+        <input type="text" id="yuqueRepoId" placeholder="知识库 ID">
+      </div>
     </div>
-    <div class="field" id="githubFields" style="display:none">
-      <label>GitHub Token</label>
-      <input type="password" id="githubToken" placeholder="GitHub Personal Access Token">
+    <div id="githubFields" style="display:none">
+      <div class="field">
+        <label>GitHub Token</label>
+        <input type="password" id="githubToken" placeholder="GitHub Personal Access Token">
+      </div>
     </div>
   </section>
 
   <div class="actions">
+    <button class="btn secondary" id="testBtn">测试连接</button>
     <button class="btn" id="saveBtn">保存设置</button>
   </div>
 

@@ -32,7 +32,12 @@ export default defineContentScript({
 
         switch (mode) {
           case 'fullpage':
-            result = await captureFullPage(document, options);
+            result = await captureFullPage(document, {
+              ...options,
+              onProgress: (c, t, s) => {
+                browser.runtime.sendMessage({ type: 'clipProgress', current: c, total: t, step: s }).catch(() => {});
+              },
+            });
             break;
           case 'article':
             result = await captureArticle(document, options);

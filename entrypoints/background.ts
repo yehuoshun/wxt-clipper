@@ -23,6 +23,10 @@ export default defineBackground(() => {
       if (!tab?.id) return { success: false, error: 'No active tab' };
       return sendClip(tab.id, msg.mode, msg.options);
     }
+    // Forward progress to popup
+    if (msg.type === 'clipProgress') {
+      return; // Popup listens directly
+    }
     if (msg.type === 'startElementPicker') {
       const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
       if (!tab?.id) return { success: false, error: 'No active tab' };

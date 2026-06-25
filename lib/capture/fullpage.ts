@@ -20,10 +20,10 @@ interface CaptureOptions {
   removeHidden?: boolean;
   compressCSS?: boolean;
   inlineResources?: boolean;
-  /** CSS selector for element to clip (instead of full page) */
   selector?: string;
-  /** Max iframe depth */
   maxFrameDepth?: number;
+  /** Progress callback */
+  onProgress?: (current: number, total: number, step: string) => void;
 }
 
 interface CaptureResult {
@@ -43,13 +43,17 @@ export async function captureFullPage(
     inlineResources = true,
     selector,
     maxFrameDepth = 3,
+    onProgress,
   } = options;
+
+  const report = (c: number, t: number, s: string) => onProgress?.(c, t, s);
 
   const url = doc.URL;
   const title = doc.title;
 
   // Trigger lazy-loaded content
   if (inlineResources) {
+    report(1, 8, '触发懒加载内容...');
     await triggerLazyContent(doc);
   }
 
@@ -67,6 +71,7 @@ export async function captureFullPage(
   const titleFromClone = selector ? getElementTitle(doc, selector) : title;
 
   // Process Shadow DOM
+  report(2, 8, '处理 Shadow DOM...');
   processShadowDOM(doc, clone);
 
   // Remove scripts
@@ -86,6 +91,7 @@ export async function captureFullPage(
   });
 
   // Strip hidden watermarks
+  report(3, 8, '清洗隐藏水印...');
   const watermarkCount = stripWatermarks(clone);
   if (watermarkCount > 0) {
     console.log(`[Web Clipper] Stripped ${watermarkCount} watermark elements`);
@@ -93,12 +99,17 @@ export async function captureFullPage(
 
   // Inline all resources
   if (inlineResources) {
+    report(4, 8, '内联样式表...');
     await inlineStylesheets(clone, doc);
+    report(5, 8, '内联背景图...');
     await inlineStyleBackgrounds(clone, doc);
     await inlineImages(clone);
+    report(6, 8, '内联 CSS 背景图...');
     await inlineCSSBackgroundImages(clone, doc);
+    report(7, 8, '捕获字体 & Canvas...');
     await inlineFonts(clone, doc);
     await convertCanvasToImages(clone, doc);
+    report(8, 8, '处理 iframe...');
     await processIframes(clone, doc, maxFrameDepth);
   }
 
