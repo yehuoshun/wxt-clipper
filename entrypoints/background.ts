@@ -36,16 +36,87 @@ export default defineBackground(() => {
   // ===== Send clip command to content script =====
   async function sendClip(tabId: number, mode: string, options?: Record<string, unknown>) {
     try {
-      return await browser.tabs.sendMessage(tabId, { type: 'clip', mode, options });
+      const result = await browser.tabs.sendMessage(tabId, { type: 'clip', mode, options });
+      if (result?.success && result.content) {
+        await downloadClip(result);
+      }
+      return result;
     } catch {
       // Content script not loaded — inject it
       await browser.scripting.executeScript({
         target: { tabId },
         files: ['content-scripts/content.js'],
       });
-      // Wait a tick then retry
       await new Promise(r => setTimeout(r, 100));
-      return browser.tabs.sendMessage(tabId, { type: 'clip', mode, options });
+      const result = await browser.tabs.sendMessage(tabId, { type: 'clip', mode, options });
+      if (result?.success && result.content) {
+        await downloadClip(result);
+      }
+      return result;
+    }
+  }
+
+  async function downloadClip(result: { content: string; filename: string; format: string }) {
+    const mime = result.format === 'markdown' ? 'text/markdown' : 'text/html';
+    const url = URL.createObjectURL(new Blob([result.content], { type: mime }));
+    try {
+      await browser.downloads.download({ url, filename: result.filename, saveAs: false });
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+
+    // Try cloud sync if configured
+    const stored = await browser.storage.local.get('config');
+    const config = stored.config;
+    if (!config?.storageType || config.storageType === 'none') return;
+
+    try {
+      await syncToCloud(result.content, result.filename, config);
+    } catch (err) {
+      console.warn('Cloud sync failed:', err);
+    }
+  }
+
+  async function syncToCloud(content: string, title: string, config: Record<string, string>) {
+    switch (config.storageType) {
+      case 'webdav': {
+        const ext = config.defaultFormat === 'markdown' ? 'md' : 'html';
+        const filename = `${title.replace(/[\\/:*?"<>|]/g, '_')}.${ext}`;
+        const url = `${config.webdavEndpoint.replace(/\/$/, '')}/${filename}`;
+        const headers: Record<string, string> = { 'Content-Type': 'application/octet-stream' };
+        if (config.webdavUser && config.webdavPass) {
+          headers['Authorization'] = 'Basic ' + btoa(`${config.webdavUser}:${config.webdavPass}`);
+        }
+        await fetch(url, { method: 'PUT', headers, body: content });
+        break;
+      }
+      case 'yuque': {
+        await fetch(`https://www.yuque.com/api/v2/repos/${config.yuqueRepoId}/docs`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Auth-Token': config.yuqueToken,
+          },
+          body: JSON.stringify({ title, body: content, format: config.defaultFormat || 'markdown', public: 0 }),
+        });
+        break;
+      }
+      case 'github': {
+        const ext = config.defaultFormat === 'markdown' ? 'md' : 'html';
+        await fetch('https://api.github.com/gists', {
+          method: 'POST',
+          headers: {
+            'Authorization': `token ${config.githubToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            description: `Clipped: ${title}`,
+            public: false,
+            files: { [`${title}.${ext}`]: { content } },
+          }),
+        });
+        break;
+      }
     }
   }
 });
