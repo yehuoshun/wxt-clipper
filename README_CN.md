@@ -5,6 +5,10 @@
 <h1 align="center">Web Clipper</h1>
 
 <p align="center">
+  <a href="README.md">English</a> | <a href="README_CN.md">中文文档</a>
+</p>
+
+<p align="center">
   <strong>全平台浏览器剪藏插件</strong>
 </p>
 

@@ -5,6 +5,10 @@
 <h1 align="center">Web Clipper</h1>
 
 <p align="center">
+  <a href="README_CN.md">中文文档</a> | <a href="README.md">English</a>
+</p>
+
+<p align="center">
   <strong>A cross-platform browser extension for web clipping</strong>
 </p>
 
