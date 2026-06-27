@@ -46,12 +46,27 @@ jobs:
           name: wxt-clipper-edge
           path: wxt-clipper-edge.zip
 
+      - name: Pack Chrome CRX
+        run: |
+          echo "${{ secrets.CRX_PRIVATE_KEY }}" > key.pem
+          # Chrome/Chromium not available on ubuntu-latest, use crx3-python
+          pip install crx3
+          crx3 pack .output/chrome-mv3 -k key.pem -o wxt-clipper-chrome.crx
+          zip -j wxt-clipper-chrome.crx.zip wxt-clipper-chrome.crx
+
+      - name: Upload Chrome CRX
+        uses: actions/upload-artifact@v4
+        with:
+          name: wxt-clipper-chrome-crx
+          path: wxt-clipper-chrome.crx
+
       - name: Create Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: |
             wxt-clipper-chrome.zip
+            wxt-clipper-chrome.crx
             wxt-clipper-firefox.zip
             wxt-clipper-edge.zip
           generate_release_notes: true
