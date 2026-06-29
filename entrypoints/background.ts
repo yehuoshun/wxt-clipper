@@ -3,20 +3,22 @@ import { getLogger, persistError } from '../lib/logger';
 
 const log = getLogger('background');
 
-// ===== 全局未捕获异常/拒绝日志（记到 storage，在设置页能看到） =====
-self.addEventListener('error', (event) => {
-  const msg = event.message || 'Unknown error';
-  const source = `${event.filename || ''}:${event.lineno || ''}:${event.colno || ''}`;
-  persistError('background', `Uncaught: ${msg}`, { source, stack: event.error?.stack || '' });
-});
-
-self.addEventListener('unhandledrejection', (event) => {
-  const reason = event.reason;
-  const msg = reason?.message || String(reason) || 'Unknown rejection';
-  persistError('background', `Unhandled rejection: ${msg}`, { stack: reason?.stack || '' });
-});
-
 export default defineBackground(() => {
+  // ===== 全局未捕获异常/拒绝日志（记到 storage，在设置页能看到） =====
+  // 注意：必须放在 defineBackground 回调内部，否则 WXT 构建时在 Node 环境会报错
+  if (typeof self !== 'undefined' && typeof self.addEventListener === 'function') {
+    self.addEventListener('error', (event) => {
+      const msg = event.message || 'Unknown error';
+      const source = `${event.filename || ''}:${event.lineno || ''}:${event.colno || ''}`;
+      persistError('background', `Uncaught: ${msg}`, { source, stack: event.error?.stack || '' });
+    });
+
+    self.addEventListener('unhandledrejection', (event) => {
+      const reason = event.reason;
+      const msg = reason?.message || String(reason) || 'Unknown rejection';
+      persistError('background', `Unhandled rejection: ${msg}`, { stack: reason?.stack || '' });
+    });
+  }
   // ===== Context Menu =====
   browser.contextMenus.create({ id: 'clip-fullpage', title: '保存完整页面', contexts: ['page'] });
   browser.contextMenus.create({ id: 'clip-article', title: '提取正文', contexts: ['page'] });
