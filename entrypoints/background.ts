@@ -131,12 +131,9 @@ export default defineBackground(() => {
 
   async function downloadClip(result: { content: string; filename: string; format: string }) {
     const mime = result.format === 'markdown' ? 'text/markdown' : 'text/html';
-    const url = URL.createObjectURL(new Blob([result.content], { type: mime }));
-    try {
-      await browser.downloads.download({ url, filename: result.filename, saveAs: false });
-    } finally {
-      URL.revokeObjectURL(url);
-    }
+    // Service Worker 没有 URL.createObjectURL，用 data URI 替代
+    const url = `data:${mime};charset=utf-8,${encodeURIComponent(result.content)}`;
+    await browser.downloads.download({ url, filename: result.filename, saveAs: false });
 
     // Try cloud sync if configured
     const stored = await browser.storage.local.get('config');
