@@ -1,5 +1,5 @@
 /**
- * Unified logger for Web Clipper.
+ * Unified logger for WXT Clipper.
  *
  * - Level-based filtering (debug / info / warn / error)
  * - Persists to chrome.storage.local as a rotating ring buffer

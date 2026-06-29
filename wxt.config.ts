@@ -10,7 +10,7 @@ export default defineConfig({
     },
   }),
   manifest: {
-    name: 'Web Clipper',
+    name: 'WXT Clipper',
     description: '全平台剪藏插件 — 全页保存 / 正文提取 / 选区剪藏',
     permissions: [
       'activeTab',
@@ -21,7 +21,7 @@ export default defineConfig({
     ],
     host_permissions: ['<all_urls>'],
     action: {
-      default_title: 'Web Clipper',
+      default_title: 'WXT Clipper',
       default_popup: 'popup/index.html',
       default_icon: {
         '16': 'icon_16.png',

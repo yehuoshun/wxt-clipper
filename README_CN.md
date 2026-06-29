@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="public/icon_128.png" alt="Web Clipper" width="128" height="128">
+  <img src="public/icon_128.png" alt="WXT Clipper" width="128" height="128">
 </p>
 
-<h1 align="center">Web Clipper</h1>
+<h1 align="center">WXT Clipper</h1>
 
 <p align="center">
   <a href="README.md">English</a> | <a href="README_CN.md">中文文档</a>
@@ -92,7 +92,7 @@ npm run build
 
 ### 弹出面板
 
-1. 点击工具栏中的 Web Clipper 图标
+1. 点击工具栏中的 WXT Clipper 图标
 2. 选择剪藏模式（完整页面 / 正文提取 / 选区剪藏 / 元素选择）
 3. 选择输出格式（HTML / Markdown）
 4. 点击**剪藏**
