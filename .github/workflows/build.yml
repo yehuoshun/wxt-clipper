@@ -49,10 +49,8 @@ jobs:
       - name: Pack Chrome CRX
         run: |
           echo "${{ secrets.CRX_PRIVATE_KEY }}" > key.pem
-          # Chrome/Chromium not available on ubuntu-latest, use crx3-python
           pip install crx3
-          crx3 pack .output/chrome-mv3 -k key.pem -o wxt-clipper-chrome.crx
-          zip -j wxt-clipper-chrome.crx.zip wxt-clipper-chrome.crx
+          crx3 create .output/chrome-mv3 -k key.pem -o wxt-clipper-chrome.crx
 
       - name: Upload Chrome CRX
         uses: actions/upload-artifact@v4
