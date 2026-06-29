@@ -97,6 +97,22 @@ function createLogger(module: string) {
 
 // ===== Public API =====
 
+/**
+ * Direct persist for uncaught errors (bypasses log level filtering).
+ * Used by global error handlers in background script.
+ */
+export async function persistError(module: string, msg: string, data?: unknown): Promise<void> {
+  const entry: LogEntry = {
+    t: getTimestamp(),
+    l: 'error',
+    m: module,
+    msg,
+    data,
+  };
+  console.error(`[WebClipper][${module}]`, msg, data ?? '');
+  await persist(entry);
+}
+
 /** Create a named logger for a module */
 export function getLogger(module: string) {
   // Kick off async level load (non-blocking)
