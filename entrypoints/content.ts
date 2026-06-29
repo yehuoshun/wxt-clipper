@@ -62,9 +62,17 @@ export default defineContentScript({
         const ext = format === 'markdown' ? 'md' : 'html';
         const filename = `${sanitizeFilename(result.title || document.title)}.${ext}`;
 
+        // Store content in storage.local to bypass sendMessage size limit (Chrome ~64KB per message)
+        // Background will read it from storage instead of from the message response
+        const storageKey = `__clip_result_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        await browser.storage.local.set({
+          [storageKey]: content,
+          [`${storageKey}_meta`]: { filename, format, title: result.title, url: result.url },
+        });
+
         return {
           success: true,
-          content,
+          storageKey,
           filename,
           format,
           title: result.title,

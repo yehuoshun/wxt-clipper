@@ -29,10 +29,7 @@ export async function captureArticle(
   const clone = doc.cloneNode(true) as Document;
   const url = doc.URL;
 
-  // Strip watermarks from the clone (computed styles work on live DOM)
-  // We need the live doc for computed styles, so strip there first
-  stripWatermarks(doc);
-  // Also strip from the clone
+  // Strip watermarks from the clone only (never modify live document)
   stripWatermarks(clone.documentElement);
 
   // Use Mozilla Readability

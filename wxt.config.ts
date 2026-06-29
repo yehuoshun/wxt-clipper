@@ -15,6 +15,7 @@ export default defineConfig({
     permissions: [
       'activeTab',
       'storage',
+      'unlimitedStorage',
       'downloads',
       'scripting',
       'contextMenus',

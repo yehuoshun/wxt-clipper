@@ -54,20 +54,7 @@ export async function captureFullPage(
   const url = doc.URL;
   const title = doc.title;
 
-  // Trigger lazy-loaded content
-  if (inlineResources) {
-    report(1, 8, '触发懒加载内容...');
-    await triggerLazyContent(doc);
-  }
-
-  // Strip hidden watermarks from live document first (computed styles work on live DOM)
-  report(3, 8, '清洗隐藏水印...');
-  const watermarkCount = stripWatermarks(doc);
-  if (watermarkCount > 0) {
-    log.info(`Stripped ${watermarkCount} watermark elements`);
-  }
-
-  // Clone the document
+  // Clone the document FIRST — never mutate the live document
   let source: Element;
   if (selector) {
     const el = doc.querySelector(selector);
@@ -78,6 +65,19 @@ export async function captureFullPage(
   }
 
   const clone = source.cloneNode(true) as HTMLElement;
+
+  // Resolve lazy images on the CLONE (not live doc) — avoid live DOM side effects
+  if (inlineResources) {
+    report(1, 8, '触发懒加载内容...');
+    resolveLazyImages(clone);
+  }
+
+  // Strip hidden watermarks on the CLONE (never modify live document)
+  report(3, 8, '清洗隐藏水印...');
+  const watermarkCount = stripWatermarks(clone);
+  if (watermarkCount > 0) {
+    log.info(`Stripped ${watermarkCount} watermark elements`);
+  }
   const titleFromClone = selector ? getElementTitle(doc, selector) : title;
 
   // Process Shadow DOM
@@ -128,80 +128,113 @@ export async function captureFullPage(
     if (!style.textContent?.trim()) style.remove();
   });
 
-  // Build head
-  let head = clone.querySelector('head');
-  if (!head) {
-    head = doc.createElement('head');
-    clone.insertBefore(head, clone.firstChild);
+  // Extract body content + style tags (not a full document, since serializeHTML wraps it)
+  let bodyHtml: string;
+
+  if (selector) {
+    // Element-specific capture: return the element's outer HTML
+    bodyHtml = clone.outerHTML;
+  } else {
+    // Full page: extract <style> tags from head + <body> inner HTML
+    const headEl = clone.querySelector('head');
+    const bodyEl = clone.querySelector('body');
+
+    bodyHtml = '';
+
+    // Include inlined styles from the original page's head
+    if (headEl) {
+      headEl.querySelectorAll('style').forEach(style => {
+        bodyHtml += style.outerHTML + '\n';
+      });
+    }
+
+    // Include body content
+    if (bodyEl) {
+      bodyHtml += bodyEl.innerHTML;
+    } else {
+      bodyHtml += clone.innerHTML;
+    }
   }
 
-  // Meta charset
-  const meta = doc.createElement('meta');
-  meta.setAttribute('charset', 'utf-8');
-  head.insertBefore(meta, head.firstChild);
+  // Source URL comment
+  bodyHtml += `\n<!-- Clipped from: ${escapeHtml(url)} -->`;
 
-  // Base tag
-  const base = doc.createElement('base');
-  base.setAttribute('href', url);
-  head.insertBefore(base, head.firstChild?.nextSibling || null);
-
-  // Source URL watermark
-  const watermark = doc.createElement('meta');
-  watermark.setAttribute('name', 'clipped-from');
-  watermark.setAttribute('content', url);
-  head.appendChild(watermark);
-
-  const html = '<!DOCTYPE html>\n' + clone.outerHTML;
-
-  return { title: titleFromClone, html, url };
+  return { title: titleFromClone, html: bodyHtml, url };
 }
 
-// ===== Lazy Content Trigger =====
+// ===== Lazy Image Resolution (on clone — never touches live document) =====
 
-async function triggerLazyContent(doc: Document): Promise<void> {
-  // Scroll to trigger lazy images
-  const scrollTop = doc.documentElement.scrollTop;
-  const steps = 5;
-  const stepHeight = doc.documentElement.scrollHeight / steps;
-
-  for (let i = 0; i <= steps; i++) {
-    window.scrollTo(0, stepHeight * i);
-    await sleep(100);
-  }
-
-  // Restore scroll position
-  window.scrollTo(0, scrollTop);
-
-  // Wait for images to load
-  const imgs = doc.querySelectorAll<HTMLImageElement>('img[loading="lazy"], img[data-src], img[data-original]');
-  await Promise.all(
-    Array.from(imgs).map(async (img) => {
-      const dataSrc = img.getAttribute('data-src') || img.getAttribute('data-original');
-      if (dataSrc) {
-        img.setAttribute('src', dataSrc);
-      }
-      if (img.complete) return;
-      await new Promise<void>(resolve => {
-        img.addEventListener('load', () => resolve(), { once: true });
-        img.addEventListener('error', () => resolve(), { once: true });
-        setTimeout(() => resolve(), 3000);
-      });
-    })
-  );
+/**
+ * Resolve lazy-loaded images on the CLONED document.
+ * This does NOT scroll the live page or trigger network loads.
+ * It simply copies data-src → src so the clone has the actual image URLs.
+ */
+function resolveLazyImages(clone: HTMLElement): void {
+  clone.querySelectorAll<HTMLImageElement>('img[loading="lazy"], img[data-src], img[data-original]').forEach(img => {
+    const dataSrc = img.getAttribute('data-src') || img.getAttribute('data-original');
+    if (dataSrc) {
+      img.setAttribute('src', dataSrc);
+      img.removeAttribute('loading');
+    }
+  });
 }
 
 // ===== Shadow DOM =====
 
 function processShadowDOM(doc: Document, clone: HTMLElement): void {
-  const allElements = doc.querySelectorAll('*');
-  const cloneElements = clone.querySelectorAll('*');
+  // Use a more robust matching strategy: match by tagName + index among same-tag siblings
+  function findCorrespondingNode(liveEl: Element): Element | null {
+    // Build path from live element: each entry is [tagName, indexAmongSameTag]
+    interface PathEntry { tag: string; idx: number }
+    const path: PathEntry[] = [];
+    let current: Element | null = liveEl;
+    while (current && current !== doc.documentElement) {
+      const parentEl: Element | null = current.parentElement;
+      if (!parentEl) break;
+      const tag = current.tagName;
+      const siblings = Array.from(parentEl.children).filter((c: Element) => c.tagName === tag);
+      const idx = siblings.indexOf(current);
+      path.unshift({ tag, idx });
+      current = parentEl;
+    }
 
-  allElements.forEach((el, i) => {
+    // Traverse the clone using the same path
+    let cloneCursor: Element = clone;
+
+    if (clone.tagName !== doc.documentElement.tagName) {
+      // Selector mode — clone is a specific element, try matching top of path
+      const relevantPath = path.slice(-5);
+      for (const entry of relevantPath) {
+        const curChildren: Element[] = Array.from(cloneCursor.children)
+          .filter((c: Element) => c.tagName === entry.tag);
+        if (curChildren.length > 0) {
+          const nextChild: Element = curChildren[Math.min(entry.idx, curChildren.length - 1)];
+          if (nextChild) { cloneCursor = nextChild; continue; }
+        }
+        break;
+      }
+      return cloneCursor === clone ? null : cloneCursor;
+    }
+
+    // Full page mode — traverse from root
+    for (const entry of path) {
+      const curChildren: Element[] = Array.from(cloneCursor.children)
+        .filter((c: Element) => c.tagName === entry.tag);
+      if (curChildren.length > 0) {
+        cloneCursor = curChildren[Math.min(entry.idx, curChildren.length - 1)];
+      } else {
+        return null;
+      }
+    }
+
+    return cloneCursor;
+  }
+
+  const shadowHosts = doc.querySelectorAll('*');
+  shadowHosts.forEach(el => {
     if (el.shadowRoot) {
-      const shadowClone = cloneElements[i];
-      if (shadowClone) {
-        const shadowContent = el.shadowRoot.cloneNode(true) as ShadowRoot;
-        // Attach shadow and copy content
+      const shadowClone = findCorrespondingNode(el);
+      if (shadowClone && shadowClone.tagName === el.tagName) {
         try {
           const newShadow = shadowClone.attachShadow({ mode: 'open' });
           newShadow.innerHTML = serializeShadowContent(el.shadowRoot);
@@ -505,4 +538,16 @@ function minifyCSS(css: string): string {
 
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// Re-export for use by other modules
+// (Previously triggerLazyContent was async with scroll + network waits;
+//  now it's a synchronous data-src→src pass on the clone only.)
+
+function escapeHtml(str: string): string {
+  const map: Record<string, string> = {
+    '&': '&amp;', '<': '&lt;', '>': '&gt;',
+    '"': '&quot;', "'": '&#39;',
+  };
+  return str.replace(/[&<>"']/g, c => map[c]);
 }

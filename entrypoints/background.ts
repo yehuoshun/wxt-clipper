@@ -123,12 +123,10 @@ export default defineBackground(() => {
 
   // ===== Send clip command to content script =====
   async function sendClip(tabId: number, mode: string, options?: Record<string, unknown>) {
+    let result: any;
+
     try {
-      const result = await browser.tabs.sendMessage(tabId, { type: 'clip', mode, options });
-      if (result?.success && result.content) {
-        await downloadClip(result);
-      }
-      return result;
+      result = await browser.tabs.sendMessage(tabId, { type: 'clip', mode, options });
     } catch {
       // Content script not loaded — inject it
       await browser.scripting.executeScript({
@@ -136,29 +134,63 @@ export default defineBackground(() => {
         files: ['content-scripts/content.js'],
       });
       await new Promise(r => setTimeout(r, 100));
-      const result = await browser.tabs.sendMessage(tabId, { type: 'clip', mode, options });
-      if (result?.success && result.content) {
-        await downloadClip(result);
+      result = await browser.tabs.sendMessage(tabId, { type: 'clip', mode, options });
+    }
+
+    if (result?.success) {
+      // Read content from storage.local (bypasses sendMessage size limit)
+      if (result.storageKey) {
+        await retrieveAndDownload(result);
+      } else if (result.content) {
+        // Fallback for direct content (small clips like article/selection)
+        await downloadClip(result.content, result.filename, result.format);
       }
-      return result;
+    }
+
+    return result;
+  }
+
+  async function retrieveAndDownload(result: { storageKey: string; filename: string; format: string; title?: string }) {
+    const stored = await browser.storage.local.get([result.storageKey, `${result.storageKey}_meta`]);
+    const content: string | undefined = stored[result.storageKey];
+
+    if (!content) {
+      log.warn('Clip content not found in storage (may have exceeded storage quota)', { key: result.storageKey });
+      return;
+    }
+
+    try {
+      await downloadClip(content, result.filename, result.format);
+
+      // Cloud sync
+      const configStored = await browser.storage.local.get('config');
+      const config = configStored.config;
+      if (config?.storageType && config.storageType !== 'none') {
+        try {
+          await syncToCloud(content, result.filename, config);
+        } catch (err) {
+          log.warn('Cloud sync failed', err);
+        }
+      }
+    } finally {
+      // Clean up storage
+      await browser.storage.local.remove([result.storageKey, `${result.storageKey}_meta`]).catch(() => {});
     }
   }
 
-  async function downloadClip(result: { content: string; filename: string; format: string }) {
-    const mime = result.format === 'markdown' ? 'text/markdown' : 'text/html';
-    // Service Worker 没有 URL.createObjectURL，用 data URI 替代
-    const url = `data:${mime};charset=utf-8,${encodeURIComponent(result.content)}`;
-    await browser.downloads.download({ url, filename: result.filename, saveAs: false });
-
-    // Try cloud sync if configured
-    const stored = await browser.storage.local.get('config');
-    const config = stored.config;
-    if (!config?.storageType || config.storageType === 'none') return;
-
+  async function downloadClip(content: string, filename: string, format: string) {
+    const mime = format === 'markdown' ? 'text/markdown' : 'text/html';
+    // 使用 Blob URL 避免 data URI 的 URL 长度限制（~2MB）
+    // Chrome MV3 Service Worker 支持 URL.createObjectURL
+    const blob = new Blob([content], { type: `${mime};charset=utf-8` });
+    const url = URL.createObjectURL(blob);
     try {
-      await syncToCloud(result.content, result.filename, config);
-    } catch (err) {
-      log.warn('Cloud sync failed', err);
+      await browser.downloads.download({ url, filename, saveAs: false });
+    } finally {
+      // 延迟释放以让下载有机会启动
+      setTimeout(() => {
+        try { URL.revokeObjectURL(url); } catch { /* ignore */ }
+      }, 2000);
     }
   }
 

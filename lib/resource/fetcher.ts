@@ -177,16 +177,35 @@ export async function fetchText(url: string, options?: FetchOptions): Promise<st
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), opts.timeout);
 
+      // Signal to content-hooks that this is a clipper-originated fetch
+      try {
+        if (typeof window !== 'undefined' && (window as any).__clipper_fetch_guard === false) {
+          (window as any).__clipper_fetch_count = ((window as any).__clipper_fetch_count || 0) + 1;
+        }
+      } catch { /* ignore */ }
+
       const res = await fetch(url, {
         mode: 'cors',
         signal: controller.signal,
       });
+
+      try {
+        if (typeof window !== 'undefined' && (window as any).__clipper_fetch_count > 0) {
+          (window as any).__clipper_fetch_count--;
+        }
+      } catch { /* ignore */ }
+
       clearTimeout(timer);
       releaseSlot();
 
       if (!res.ok) return null;
       return res.text();
     } catch (err) {
+      try {
+        if (typeof window !== 'undefined' && (window as any).__clipper_fetch_count > 0) {
+          (window as any).__clipper_fetch_count--;
+        }
+      } catch { /* ignore */ }
       releaseSlot();
       lastError = err as Error;
       if (attempt < opts.maxRetries! - 1) {
@@ -220,10 +239,24 @@ export async function fetchAsDataUri(url: string, options?: FetchOptions): Promi
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), opts.timeout);
 
+      // Signal to content-hooks that this is a clipper-originated fetch
+      try {
+        if (typeof window !== 'undefined' && (window as any).__clipper_fetch_guard === false) {
+          (window as any).__clipper_fetch_count = ((window as any).__clipper_fetch_count || 0) + 1;
+        }
+      } catch { /* ignore */ }
+
       const res = await fetch(url, {
         mode: 'cors',
         signal: controller.signal,
       });
+
+      try {
+        if (typeof window !== 'undefined' && (window as any).__clipper_fetch_count > 0) {
+          (window as any).__clipper_fetch_count--;
+        }
+      } catch { /* ignore */ }
+
       clearTimeout(timer);
       releaseSlot();
 
@@ -237,6 +270,11 @@ export async function fetchAsDataUri(url: string, options?: FetchOptions): Promi
 
       return blobToDataUri(blob);
     } catch (err) {
+      try {
+        if (typeof window !== 'undefined' && (window as any).__clipper_fetch_count > 0) {
+          (window as any).__clipper_fetch_count--;
+        }
+      } catch { /* ignore */ }
       releaseSlot();
       lastError = err as Error;
       if (attempt < opts.maxRetries! - 1) {

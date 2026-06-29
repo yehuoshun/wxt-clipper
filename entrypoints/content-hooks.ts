@@ -21,8 +21,25 @@ export default defineContentScript({
 
     const capturedResources = new Map<string, { dataUri: string }>();
 
+    // Guard counter: when > 0, skip hooking to avoid redundant blob cloning
+    // during the extension's own resource inlining fetch calls.
+    // The fetcher module increments __clipper_fetch_count before its own fetch calls.
+    Object.defineProperty(window, '__clipper_fetch_guard', {
+      get: () => (window as any).__clipper_fetch_count > 0,
+      configurable: true,
+    });
+    // Initialize counter if not already set
+    if ((window as any).__clipper_fetch_count === undefined) {
+      (window as any).__clipper_fetch_count = 0;
+    }
+
     // Hook fetch
     window.fetch = async function (input: RequestInfo | URL, init?: RequestInit) {
+      // Skip interception for requests made by the clipper itself
+      if ((window as any).__clipper_fetch_count > 0) {
+        return originalFetch.call(window, input, init);
+      }
+
       const response = await originalFetch.call(window, input, init);
       const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
 
@@ -52,6 +69,9 @@ export default defineContentScript({
     };
 
     // Hook XHR
+    // ⚠️ 必须用 Object.defineProperty 拦截 onload 赋值，否则页面设置的 xhr.onload 会被静默吞掉
+    const XHR_LOAD_KEY = '__clipper_hooked';  // 标记已 hook，避免重复
+
     XMLHttpRequest.prototype.open = function (
       method: string,
       url: string | URL,
@@ -61,30 +81,35 @@ export default defineContentScript({
     ) {
       const urlStr = typeof url === 'string' ? url : url.href;
       const xhr = this;
-      const originalOnLoad = xhr.onload;
 
-      xhr.addEventListener('load', () => {
-        try {
-          const contentType = xhr.getResponseHeader('Content-Type') || '';
-          const isRelevant =
-            contentType.startsWith('image/') ||
-            contentType.startsWith('text/css') ||
-            contentType.includes('font') ||
-            urlStr.match(/\.(png|jpg|jpeg|gif|svg|webp|css|woff2?|ttf|eot)$/i);
+      // 只在首次 hook，避免重复添加
+      if (!(xhr as any)[XHR_LOAD_KEY]) {
+        (xhr as any)[XHR_LOAD_KEY] = true;
 
-          if (isRelevant && xhr.response) {
-            const blob = new Blob([xhr.response], {
-              type: contentType || 'application/octet-stream',
-            });
-            if (blob.size <= 5 * 1024 * 1024) {
-              toDataUri(blob).then(dataUri => {
-                capturedResources.set(urlStr, { dataUri });
-                dispatchResourceEvent(urlStr, dataUri);
-              }).catch(() => {});
+        // 通过 addEventListener 添加监听器——这不影响页面自己的 onload 或 addEventListener
+        xhr.addEventListener('load', () => {
+          try {
+            const contentType = xhr.getResponseHeader('Content-Type') || '';
+            const isRelevant =
+              contentType.startsWith('image/') ||
+              contentType.startsWith('text/css') ||
+              contentType.includes('font') ||
+              urlStr.match(/\.(png|jpg|jpeg|gif|svg|webp|css|woff2?|ttf|eot)$/i);
+
+            if (isRelevant && xhr.response) {
+              const blob = new Blob([xhr.response], {
+                type: contentType || 'application/octet-stream',
+              });
+              if (blob.size <= 5 * 1024 * 1024) {
+                toDataUri(blob).then(dataUri => {
+                  capturedResources.set(urlStr, { dataUri });
+                  dispatchResourceEvent(urlStr, dataUri);
+                }).catch(() => {});
+              }
             }
-          }
-        } catch { /* ignore */ }
-      });
+          } catch { /* ignore */ }
+        });
+      }
 
       return originalXHROpen.call(this, method, url, async ?? true, username, password);
     };
