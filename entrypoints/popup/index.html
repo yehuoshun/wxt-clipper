@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WXT Clipper</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <div class="popup">
+    <header class="header">
+      <h1>🦞 WXT Clipper</h1>
+    </header>
+
+    <div class="modes">
+      <button class="mode-btn active" data-mode="fullpage">
+        <span class="mode-icon">📄</span>
+        <span class="mode-label">完整页面</span>
+        <span class="mode-desc">保存整个网页</span>
+      </button>
+      <button class="mode-btn" data-mode="article">
+        <span class="mode-icon">📰</span>
+        <span class="mode-label">正文提取</span>
+        <span class="mode-desc">仅提取文章内容</span>
+      </button>
+      <button class="mode-btn" data-mode="selection">
+        <span class="mode-icon">✂️</span>
+        <span class="mode-label">选区剪藏</span>
+        <span class="mode-desc">保存选中区域</span>
+      </button>
+      <button class="mode-btn" data-mode="element">
+        <span class="mode-icon">🎯</span>
+        <span class="mode-label">元素选择</span>
+        <span class="mode-desc">点击页面元素</span>
+      </button>
+    </div>
+
+    <div class="options">
+      <label class="option">
+        <span>输出格式</span>
+        <select id="format">
+          <option value="html">HTML</option>
+          <option value="markdown">Markdown</option>
+        </select>
+      </label>
+      <label class="option checkbox">
+        <input type="checkbox" id="inlineResources" checked>
+        <span>内联图片资源</span>
+      </label>
+      <label class="option checkbox">
+        <input type="checkbox" id="removeScripts" checked>
+        <span>移除脚本</span>
+      </label>
+    </div>
+
+    <div class="actions">
+      <button id="clipBtn" class="btn primary">剪藏</button>
+    </div>
+
+    <div id="progress" class="progress hidden">
+      <div class="progress-bar"><div class="progress-fill"></div></div>
+      <div class="progress-text"></div>
+    </div>
+
+    <div id="status" class="status hidden"></div>
+  </div>
+  <script type="module" src="./index.ts"></script>
+</body>
+</html>

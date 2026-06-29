@@ -1,0 +1,71 @@
+name: Build & Release
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - run: npm ci
+
+      - name: Build Chrome
+        run: npx wxt build -b chrome && cd .output/chrome-mv3 && zip -r ../../wxt-clipper-chrome.zip .
+
+      - name: Build Firefox
+        run: npx wxt build -b firefox && cd .output/firefox-mv2 && zip -r ../../wxt-clipper-firefox.zip .
+
+      - name: Build Edge
+        run: npx wxt build -b edge && cd .output/edge-mv3 && zip -r ../../wxt-clipper-edge.zip .
+
+      - name: Upload Chrome
+        uses: actions/upload-artifact@v4
+        with:
+          name: wxt-clipper-chrome
+          path: wxt-clipper-chrome.zip
+
+      - name: Upload Firefox
+        uses: actions/upload-artifact@v4
+        with:
+          name: wxt-clipper-firefox
+          path: wxt-clipper-firefox.zip
+
+      - name: Upload Edge
+        uses: actions/upload-artifact@v4
+        with:
+          name: wxt-clipper-edge
+          path: wxt-clipper-edge.zip
+
+      - name: Pack Chrome CRX
+        run: |
+          echo "${{ secrets.CRX_PRIVATE_KEY }}" > key.pem
+          pip install crx3
+          # crx3 需要 output 有明确的父目录路径（否则 os.makedirs('') 会失败）
+          crx3 create .output/chrome-mv3 --private-key key.pem --output ./wxt-clipper-chrome.crx
+
+      - name: Upload Chrome CRX
+        uses: actions/upload-artifact@v4
+        with:
+          name: wxt-clipper-chrome-crx
+          path: wxt-clipper-chrome.crx
+
+      - name: Create Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            wxt-clipper-chrome.zip
+            wxt-clipper-chrome.crx
+            wxt-clipper-firefox.zip
+            wxt-clipper-edge.zip
+          generate_release_notes: true
