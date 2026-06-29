@@ -3,6 +3,7 @@
  * Preserves the DOM structure of the selected region.
  */
 
+import { fetchAsDataUri } from '../resource/fetcher';
 import { stripWatermarks } from './watermark';
 
 interface SelectionOptions {
@@ -40,7 +41,7 @@ export async function captureSelection(
   html += `<p><em>Source: <a href="${escapeHtml(doc.URL)}">${escapeHtml(doc.URL)}</a></em></p>\n`;
 
   if (includeContext) {
-    const context = getSelectionContext(range);
+    const context = getSelectionContext(doc, range);
     if (context) {
       html += `<blockquote>${context}</blockquote>\n`;
     }
@@ -105,10 +106,10 @@ function getSelectionTitle(doc: Document, range: Range): string {
   return doc.title;
 }
 
-function getSelectionContext(range: Range): string {
+function getSelectionContext(doc: Document, range: Range): string {
   // Get the parent section/heading as context
   let node: Node | null = range.startContainer;
-  while (node && node !== document.body) {
+  while (node && node !== doc.body) {
     if (node.nodeType === Node.ELEMENT_NODE) {
       const el = node as Element;
       // Find the closest section/article container
@@ -130,20 +131,4 @@ function escapeHtml(str: string): string {
     '"': '&quot;', "'": '&#39;',
   };
   return str.replace(/[&<>"']/g, c => map[c]);
-}
-
-async function fetchAsDataUri(url: string): Promise<string | null> {
-  try {
-    const res = await fetch(url, { credentials: 'include' });
-    if (!res.ok) return null;
-    const blob = await res.blob();
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = () => resolve(null);
-      reader.readAsDataURL(blob);
-    });
-  } catch {
-    return null;
-  }
 }

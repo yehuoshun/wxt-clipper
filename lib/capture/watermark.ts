@@ -19,20 +19,26 @@ export function stripWatermarks(doc: Document | HTMLElement): number {
   // 1. Remove CSS-hidden elements
   removed += removeHiddenElements(root);
 
-  // 2. Remove zero-size elements
-  removed += removeZeroSizeElements(root);
+  // 2. Remove zero-size elements (skip for detached clones — getBoundingClientRect returns 0)
+  if (root.isConnected) {
+    removed += removeZeroSizeElements(root);
+  }
 
   // 3. Strip invisible Unicode from text nodes
   removed += stripInvisibleUnicode(root);
 
-  // 4. Detect and remove same-color text
-  removed += removeSameColorText(root);
+  // 4. Detect and remove same-color text (skip for detached clones — no computed style)
+  if (root.isConnected) {
+    removed += removeSameColorText(root);
+  }
 
   // 5. Strip tracking data attributes
   removed += stripTrackingAttributes(root);
 
-  // 6. Remove hidden overlays
-  removed += removeHiddenOverlays(root);
+  // 6. Remove hidden overlays (skip for detached clones — no computed style)
+  if (root.isConnected) {
+    removed += removeHiddenOverlays(root);
+  }
 
   return removed;
 }
@@ -57,25 +63,26 @@ function removeHiddenElements(root: HTMLElement): number {
     if (isWatermarkElement(el)) { el.remove(); count++; }
   });
 
-  // Off-screen positioning
-  root.querySelectorAll<HTMLElement>('[style]').forEach(el => {
-    const style = el.getAttribute('style') || '';
-    const computed = getComputedStyleSafely(el);
-    if (!computed) return;
+  // Off-screen positioning (skip computed style checks for detached elements)
+  if (root.isConnected) {
+    root.querySelectorAll<HTMLElement>('[style]').forEach(el => {
+      const computed = getComputedStyleSafely(el);
+      if (!computed) return;
 
-    // Positioned far off-screen
-    const left = parseInt(computed.left) || 0;
-    const top = parseInt(computed.top) || 0;
-    if ((Math.abs(left) > 9999 || Math.abs(top) > 9999) && isWatermarkElement(el)) {
-      el.remove(); count++;
-      return;
-    }
+      // Positioned far off-screen
+      const left = parseInt(computed.left) || 0;
+      const top = parseInt(computed.top) || 0;
+      if ((Math.abs(left) > 9999 || Math.abs(top) > 9999) && isWatermarkElement(el)) {
+        el.remove(); count++;
+        return;
+      }
 
-    // text-indent: -9999px (classic hidden text)
-    if (computed.textIndent && parseInt(computed.textIndent) < -9000) {
-      if (isWatermarkElement(el)) { el.remove(); count++; }
-    }
-  });
+      // text-indent: -9999px (classic hidden text)
+      if (computed.textIndent && parseInt(computed.textIndent) < -9000) {
+        if (isWatermarkElement(el)) { el.remove(); count++; }
+      }
+    });
+  }
 
   return count;
 }
@@ -97,7 +104,9 @@ function removeZeroSizeElements(root: HTMLElement): number {
     if (rect.width === 0 && rect.height === 0) {
       // Check if it has text content (could be a hidden watermark)
       const text = (el.textContent || '').trim();
-      if (text.length > 0 || el.hasAttribute('data-') || el.hasAttribute('aria-')) {
+      const attrs = el.getAttributeNames();
+      const hasTrackingAttr = attrs.some(a => a.startsWith('data-') || a.startsWith('aria-'));
+      if (text.length > 0 || hasTrackingAttr) {
         el.remove(); count++;
       }
     }

@@ -34,14 +34,14 @@ export default defineBackground(() => {
       if (!tab?.id) return { success: false, error: 'No active tab' };
       // Inject content script if needed, then start picker
       try {
-        await browser.tabs.sendMessage(tab.id, { type: 'startElementPicker' });
+        await browser.tabs.sendMessage(tab.id, { type: 'startElementPicker', options: msg.options });
       } catch {
         await browser.scripting.executeScript({
           target: { tabId: tab.id },
           files: ['content-scripts/content.js'],
         });
         await new Promise(r => setTimeout(r, 100));
-        await browser.tabs.sendMessage(tab.id, { type: 'startElementPicker' });
+        await browser.tabs.sendMessage(tab.id, { type: 'startElementPicker', options: msg.options });
       }
       return { success: true };
     }

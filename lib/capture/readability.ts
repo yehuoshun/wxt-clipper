@@ -22,6 +22,9 @@ export async function captureArticle(
 ): Promise<CaptureResult> {
   const { keepImages = true } = options;
 
+  // Strip watermarks from live document first (computed styles work on live DOM)
+  stripWatermarks(doc);
+
   // Clone the document for Readability (it mutates the DOM)
   const clone = doc.cloneNode(true) as Document;
   const url = doc.URL;
@@ -45,15 +48,11 @@ export async function captureArticle(
 
   const title = article.title || doc.title;
 
-  // Build HTML and strip watermarks
-  const temp = doc.createElement('div');
-  temp.innerHTML = article.content;
-  stripWatermarks(temp);
-
+  // Build HTML (watermarks already stripped from live document above)
   let html = `<h1>${escapeHtml(title)}</h1>\n`;
   html += `<p><em>Source: <a href="${escapeHtml(url)}">${escapeHtml(url)}</a></em></p>\n`;
   html += `<hr>\n`;
-  html += temp.innerHTML;
+  html += article.content;
 
   // Inline images
   if (keepImages) {

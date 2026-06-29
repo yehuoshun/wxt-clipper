@@ -57,6 +57,13 @@ export async function captureFullPage(
     await triggerLazyContent(doc);
   }
 
+  // Strip hidden watermarks from live document first (computed styles work on live DOM)
+  report(3, 8, '清洗隐藏水印...');
+  const watermarkCount = stripWatermarks(doc);
+  if (watermarkCount > 0) {
+    console.log(`[Web Clipper] Stripped ${watermarkCount} watermark elements`);
+  }
+
   // Clone the document
   let source: Element;
   if (selector) {
@@ -89,13 +96,6 @@ export async function captureFullPage(
     const attrs = el.getAttributeNames();
     attrs.filter(a => a.startsWith('on')).forEach(a => el.removeAttribute(a));
   });
-
-  // Strip hidden watermarks
-  report(3, 8, '清洗隐藏水印...');
-  const watermarkCount = stripWatermarks(clone);
-  if (watermarkCount > 0) {
-    console.log(`[Web Clipper] Stripped ${watermarkCount} watermark elements`);
-  }
 
   // Inline all resources
   if (inlineResources) {
@@ -170,7 +170,7 @@ async function triggerLazyContent(doc: Document): Promise<void> {
   window.scrollTo(0, scrollTop);
 
   // Wait for images to load
-  const imgs = doc.querySelectorAll('img[loading="lazy"], img[data-src], img[data-original]');
+  const imgs = doc.querySelectorAll<HTMLImageElement>('img[loading="lazy"], img[data-src], img[data-original]');
   await Promise.all(
     Array.from(imgs).map(async (img) => {
       const dataSrc = img.getAttribute('data-src') || img.getAttribute('data-original');
@@ -353,21 +353,7 @@ async function inlineImages(clone: HTMLElement): Promise<void> {
 // ===== Font Capture =====
 
 async function inlineFonts(clone: HTMLElement, doc: Document): Promise<void> {
-  // 1. Capture fonts from document.fonts
-  const fontFaces: Array<{ family: string; url: string; format: string }> = [];
-
-  if (doc.fonts) {
-    for (const font of doc.fonts.values()) {
-      try {
-        if (font.status === 'loaded') {
-          // We can't easily extract the font data from document.fonts,
-          // but we can capture @font-face rules from stylesheets
-        }
-      } catch { /* skip */ }
-    }
-  }
-
-  // 2. Find @font-face rules in <style> blocks and inline the font files
+  // Find @font-face rules in <style> blocks and inline the font files
   const styles = clone.querySelectorAll('style');
   await Promise.all(
     Array.from(styles).map(async (style) => {

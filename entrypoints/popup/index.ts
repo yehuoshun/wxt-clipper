@@ -24,11 +24,42 @@ document.getElementById('clipBtn')?.addEventListener('click', async () => {
   const removeScripts = (document.getElementById('removeScripts') as HTMLInputElement).checked;
 
   if (currentMode === 'element') {
-    window.close();
-    await browser.runtime.sendMessage({
-      type: 'startElementPicker',
-      options: { format, inlineResources, removeScripts },
-    });
+    // Element picker: send clip message, background forwards to content script
+    // which starts pickElement() and waits for user click
+    btn.disabled = true;
+    btn.textContent = '点击页面上要剪藏的元素...';
+    progress.classList.remove('hidden');
+    updateProgress(0, 1, '等待元素选择...');
+    status.classList.add('hidden');
+
+    try {
+      const response = await browser.runtime.sendMessage({
+        type: 'clip',
+        mode: 'element',
+        options: { format, inlineResources, removeScripts },
+      });
+
+      progress.classList.add('hidden');
+
+      if (response?.success) {
+        status.className = 'status success';
+        status.textContent = `✅ 已保存：${response.filename}`;
+        status.classList.remove('hidden');
+        setTimeout(() => window.close(), 1500);
+      } else {
+        status.className = 'status error';
+        status.textContent = `❌ ${response?.error || '剪藏失败'}`;
+        status.classList.remove('hidden');
+      }
+    } catch (err) {
+      progress.classList.add('hidden');
+      status.className = 'status error';
+      status.textContent = `❌ ${err}`;
+      status.classList.remove('hidden');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '剪藏';
+    }
     return;
   }
 
