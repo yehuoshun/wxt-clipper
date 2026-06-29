@@ -56,7 +56,55 @@ export default defineBackground(() => {
       await browser.storage.local.set({ config: msg.config });
       return { success: true };
     }
+
+    // ===== Content Script Fetch Proxy =====
+    // Content scripts are restricted by page CSP, so we proxy fetches
+    // through the background script which has unrestricted network access.
+    if (msg.type === 'proxyFetch') {
+      return handleProxyFetch(msg as any);
+    }
   });
+
+  // ===== Fetch Proxy Handler =====
+  async function handleProxyFetch(msg: {
+    subType: 'text' | 'dataUri';
+    url: string;
+    timeout: number;
+  }): Promise<{ data: string | null }> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), msg.timeout || 10000);
+
+    try {
+      const res = await fetch(msg.url, {
+        mode: 'cors',
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+
+      if (!res.ok) return { data: null };
+
+      if (msg.subType === 'text') {
+        return { data: await res.text() };
+      }
+
+      // dataUri: convert blob to base64 data URI
+      const blob = await res.blob();
+      if (blob.size > 5 * 1024 * 1024) {
+        return { data: msg.url }; // Return original URL for large resources
+      }
+      const dataUri = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => reject(new Error('Failed to read blob'));
+        reader.readAsDataURL(blob);
+      });
+      return { data: dataUri };
+    } catch (err) {
+      clearTimeout(timer);
+      log.warn('Proxy fetch failed', { url: msg.url, error: (err as Error).message });
+      return { data: null };
+    }
+  }
 
   // ===== Send clip command to content script =====
   async function sendClip(tabId: number, mode: string, options?: Record<string, unknown>) {

@@ -293,27 +293,35 @@ async function replaceCSSUrls(css: string, baseURI: string): Promise<string> {
 
   if (matches.length === 0) return css;
 
-  const replacements = await Promise.all(
-    matches.map(async (match) => {
-      const rawUrl = match[1].trim();
-      if (rawUrl.startsWith('data:') || rawUrl.startsWith('#')) return null;
+  // Build a map of unique URLs -> data URIs (deduplicate fetches)
+  const uniqueUrls = new Set(matches.map(m => m[1].trim()));
+  const urlToDataUri = new Map<string, string | null>();
 
+  await Promise.all(
+    Array.from(uniqueUrls).map(async (rawUrl) => {
+      if (rawUrl.startsWith('data:') || rawUrl.startsWith('#')) {
+        urlToDataUri.set(rawUrl, null);
+        return;
+      }
       try {
         const fullUrl = new URL(rawUrl, baseURI).href;
         const dataUri = await fetchAsDataUri(fullUrl);
-        if (dataUri) {
-          return { old: match[0], new: `url(${dataUri})` };
-        }
-      } catch { /* keep original */ }
-      return null;
+        urlToDataUri.set(rawUrl, dataUri || null);
+      } catch {
+        urlToDataUri.set(rawUrl, null);
+      }
     })
   );
 
-  let result = css;
-  for (const r of replacements) {
-    if (r) result = result.replace(r.old, r.new);
-  }
-  return result;
+  // Single-pass replacement to handle duplicate URLs correctly
+  return css.replace(urlRegex, (match, rawUrl: string) => {
+    const trimmed = rawUrl.trim();
+    const dataUri = urlToDataUri.get(trimmed);
+    if (dataUri) {
+      return `url(${dataUri})`;
+    }
+    return match; // keep original
+  });
 }
 
 // ===== Image Inlining =====
@@ -363,29 +371,37 @@ async function inlineFonts(clone: HTMLElement, doc: Document): Promise<void> {
       const css = style.textContent || '';
       if (!css.includes('@font-face')) return;
 
-      const fontFaceRegex = /@font-face\s*\{[^}]*\}/g;
-      const fontFaces = css.match(fontFaceRegex);
-      if (!fontFaces) return;
+      const fontUrlRegex = /url\(["']?([^"')]+)["']?\)/g;
+      const fontUrls = [...css.matchAll(fontUrlRegex)];
+      if (fontUrls.length === 0) return;
 
-      let newCSS = css;
-      for (const ff of fontFaces) {
-        const urlMatch = ff.match(/url\(["']?([^"')]+)["']?\)/);
-        if (!urlMatch) continue;
+      // Deduplicate URL fetches
+      const uniqueUrls = new Set(fontUrls.map(m => m[1].trim()));
+      const urlToDataUri = new Map<string, string | null>();
 
-        const fontUrl = urlMatch[1].trim();
-        if (fontUrl.startsWith('data:')) continue;
-
-        try {
-          const fullUrl = new URL(fontUrl, doc.baseURI).href;
-          const dataUri = await fetchAsDataUri(fullUrl);
-          if (dataUri) {
-            const newFF = ff.replace(urlMatch[0], `url(${dataUri})`);
-            newCSS = newCSS.replace(ff, newFF);
+      await Promise.all(
+        Array.from(uniqueUrls).map(async (fontUrl) => {
+          if (fontUrl.startsWith('data:')) {
+            urlToDataUri.set(fontUrl, null);
+            return;
           }
-        } catch { /* keep original */ }
-      }
+          try {
+            const fullUrl = new URL(fontUrl, doc.baseURI).href;
+            const dataUri = await fetchAsDataUri(fullUrl);
+            urlToDataUri.set(fontUrl, dataUri || null);
+          } catch {
+            urlToDataUri.set(fontUrl, null);
+          }
+        })
+      );
 
-      style.textContent = newCSS;
+      // Single-pass replacement
+      style.textContent = css.replace(fontUrlRegex, (match, fontUrl: string) => {
+        const trimmed = fontUrl.trim();
+        const dataUri = urlToDataUri.get(trimmed);
+        if (dataUri) return `url(${dataUri})`;
+        return match;
+      });
     })
   );
 }

@@ -25,12 +25,15 @@ export async function captureArticle(
 ): Promise<CaptureResult> {
   const { keepImages = true } = options;
 
-  // Strip watermarks from live document first (computed styles work on live DOM)
-  stripWatermarks(doc);
-
   // Clone the document for Readability (it mutates the DOM)
   const clone = doc.cloneNode(true) as Document;
   const url = doc.URL;
+
+  // Strip watermarks from the clone (computed styles work on live DOM)
+  // We need the live doc for computed styles, so strip there first
+  stripWatermarks(doc);
+  // Also strip from the clone
+  stripWatermarks(clone.documentElement);
 
   // Use Mozilla Readability
   let article: { title: string; content: string; textContent: string } | null = null;
@@ -44,9 +47,9 @@ export async function captureArticle(
     }
   } catch { /* fall through to lightweight */ }
 
-  // Fallback to lightweight implementation
+  // Fallback to lightweight implementation — use clone, not live doc
   if (!article) {
-    article = lightweightExtract(doc);
+    article = lightweightExtract(clone);
   }
 
   const title = article.title || doc.title;
