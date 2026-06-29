@@ -1,4 +1,7 @@
 import { yuqueGetUser, yuqueListAllRepos, openYuqueTokenPage } from '../../lib/storage/yuque';
+import { getLogger, setLogLevel, getLogs, clearLogs, exportLogs } from '../../lib/logger';
+
+const log = getLogger('options');
 
 const stored = await browser.storage.local.get('config');
 const config = stored.config || {};
@@ -151,6 +154,72 @@ async function fetchYuqueRepos(token: string, selectedId?: string) {
 
   showToast(`✅ 找到 ${repos.length} 个知识库`, 'success');
 }
+
+// ===== Log Viewer =====
+
+async function renderLogs() {
+  const container = $('logContainer');
+  try {
+    const logs = await getLogs(100);
+    if (logs.length === 0) {
+      container.innerHTML = '<div class="log-empty">暂无日志</div>';
+      return;
+    }
+    container.innerHTML = logs.map(e => {
+      const lvl = e.l.toUpperCase();
+      const time = new Date(e.t).toLocaleTimeString('zh-CN', { hour12: false });
+      const dataStr = e.data ? ` ${JSON.stringify(e.data)}` : '';
+      return `<div class="log-entry"><span class="log-time">${time}</span><span class="log-level ${lvl}">${lvl}</span><span class="log-module">[${e.m}]</span>${escapeLog(e.msg)}${escapeLog(dataStr)}</div>`;
+    }).join('');
+    container.scrollTop = 0;
+  } catch (err) {
+    container.innerHTML = `<div class="log-empty">加载日志失败: ${err}</div>`;
+  }
+}
+
+function escapeLog(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// Restore log level from storage
+async function restoreLogLevel() {
+  try {
+    const stored = await browser.storage.local.get('logLevel');
+    if (stored.logLevel) {
+      ($('logLevel') as HTMLSelectElement).value = stored.logLevel;
+    }
+  } catch { /* ignore */ }
+}
+
+// Log level change
+$('logLevel').addEventListener('change', async () => {
+  const level = ($('logLevel') as HTMLSelectElement).value as 'debug' | 'info' | 'warn' | 'error';
+  await setLogLevel(level);
+  showToast(`✅ 日志级别已设置为 ${level.toUpperCase()}`, 'success');
+  log.info(`Log level changed to ${level}`);
+});
+
+$('refreshLogsBtn').addEventListener('click', renderLogs);
+$('clearLogsBtn').addEventListener('click', async () => {
+  await clearLogs();
+  renderLogs();
+  showToast('✅ 日志已清空', 'success');
+});
+$('exportLogsBtn').addEventListener('click', async () => {
+  const text = await exportLogs();
+  const blob = new Blob([text], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `webclipper-logs-${Date.now()}.txt`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('✅ 日志已导出', 'success');
+});
+
+// Initial load
+restoreLogLevel();
+renderLogs();
 
 function showToast(msg: string, type: string) {
   const toast = $('toast');

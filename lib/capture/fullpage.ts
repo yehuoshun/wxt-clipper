@@ -14,6 +14,9 @@
 
 import { fetchAsDataUri, fetchText } from '../resource/fetcher';
 import { stripWatermarks } from './watermark';
+import { getLogger } from '../logger';
+
+const log = getLogger('capture-fullpage');
 
 interface CaptureOptions {
   removeScripts?: boolean;
@@ -61,7 +64,7 @@ export async function captureFullPage(
   report(3, 8, '清洗隐藏水印...');
   const watermarkCount = stripWatermarks(doc);
   if (watermarkCount > 0) {
-    console.log(`[Web Clipper] Stripped ${watermarkCount} watermark elements`);
+    log.info(`Stripped ${watermarkCount} watermark elements`);
   }
 
   // Clone the document

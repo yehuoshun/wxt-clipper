@@ -3,6 +3,10 @@
  * Respects rate limits with exponential backoff.
  */
 
+import { getLogger } from '../logger';
+
+const log = getLogger('fetcher');
+
 interface FetchOptions {
   timeout?: number;
   maxRetries?: number;
@@ -67,7 +71,7 @@ export async function fetchText(url: string, options?: FetchOptions): Promise<st
     }
   }
 
-  console.warn(`Failed to fetch ${url}: ${lastError?.message}`);
+  log.warn(`Failed to fetch text`, { url, error: lastError?.message });
   return null;
 }
 
@@ -106,7 +110,7 @@ export async function fetchAsDataUri(url: string, options?: FetchOptions): Promi
     }
   }
 
-  console.warn(`Failed to fetch resource ${url}: ${lastError?.message}`);
+  log.warn(`Failed to fetch resource`, { url, error: lastError?.message });
   return null;
 }
 

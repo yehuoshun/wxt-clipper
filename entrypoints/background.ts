@@ -1,4 +1,7 @@
 import { yuqueCreateDoc, yuqueSearchDoc, yuqueUpdateDoc } from '../lib/storage/yuque';
+import { getLogger } from '../lib/logger';
+
+const log = getLogger('background');
 
 export default defineBackground(() => {
   // ===== Context Menu =====
@@ -95,7 +98,7 @@ export default defineBackground(() => {
     try {
       await syncToCloud(result.content, result.filename, config);
     } catch (err) {
-      console.warn('Cloud sync failed:', err);
+      log.warn('Cloud sync failed', err);
     }
   }
 

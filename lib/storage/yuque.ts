@@ -10,6 +10,10 @@
  * API patterns based on yuque-ai-mcp api-client + webclipper yuque_oauth service.
  */
 
+import { getLogger } from '../logger';
+
+const log = getLogger('yuque');
+
 const API_BASE = 'https://www.yuque.com/api/v2';
 const MAX_RETRIES = 3;
 const BASE_DELAY = 1000;
@@ -82,7 +86,7 @@ async function fetchWithRetry(
 
     if (shouldRetry(res) && attempt <= MAX_RETRIES) {
       const delay = BASE_DELAY * Math.pow(2, attempt - 1);
-      console.warn(`[Yuque] Retry ${attempt} after ${delay}ms (${res.status})`);
+      log.warn(`Retry ${attempt} after ${delay}ms (${res.status})`);
       await sleep(delay);
       return fetchWithRetry(url, options, attempt + 1);
     }
@@ -91,7 +95,7 @@ async function fetchWithRetry(
   } catch (err) {
     if (attempt <= MAX_RETRIES) {
       const delay = BASE_DELAY * Math.pow(2, attempt - 1);
-      console.warn(`[Yuque] Retry ${attempt} after network error, ${delay}ms`);
+      log.warn(`Retry ${attempt} after network error, ${delay}ms`);
       await sleep(delay);
       return fetchWithRetry(url, options, attempt + 1);
     }

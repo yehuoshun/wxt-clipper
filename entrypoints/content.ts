@@ -3,6 +3,9 @@ import { captureArticle } from '../lib/capture/readability';
 import { captureSelection } from '../lib/capture/selection';
 import { toMarkdown } from '../lib/format/markdown';
 import { serializeHTML } from '../lib/format/html';
+import { getLogger } from '../lib/logger';
+
+const log = getLogger('content');
 
 export default defineContentScript({
   matches: ['<all_urls>'],

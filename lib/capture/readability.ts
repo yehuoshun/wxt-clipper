@@ -5,6 +5,9 @@
 
 import { fetchAsDataUri } from '../resource/fetcher';
 import { stripWatermarks } from './watermark';
+import { getLogger } from '../logger';
+
+const log = getLogger('capture-article');
 
 interface ArticleOptions {
   keepImages?: boolean;
