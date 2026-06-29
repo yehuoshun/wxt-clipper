@@ -50,8 +50,8 @@ jobs:
         run: |
           echo "${{ secrets.CRX_PRIVATE_KEY }}" > key.pem
           pip install crx3
-          # crx3 create用法: crx3 create <extension-dir> [--private-key <pem-file>] [--output <crx-file>]
-          crx3 create .output/chrome-mv3 --private-key key.pem --output wxt-clipper-chrome.crx
+          # crx3 需要 output 有明确的父目录路径（否则 os.makedirs('') 会失败）
+          crx3 create .output/chrome-mv3 --private-key key.pem --output ./wxt-clipper-chrome.crx
 
       - name: Upload Chrome CRX
         uses: actions/upload-artifact@v4
