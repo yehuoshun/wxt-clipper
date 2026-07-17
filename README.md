@@ -1,4 +1,5 @@
-<p align="center">
+> **⚠️ ARCHIVED — This project is no longer maintained.**
+> The code quality is terrible. Do not use it. I'm keeping it here as a reminder of what not to do.<p align="center">
   <img src="public/icon_128.png" alt="WXT Clipper" width="128" height="128">
 </p>
 
